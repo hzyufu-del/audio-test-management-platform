@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }} - 消费电子音频产品测试管理与自动化辅助平台{% endblock %}
+
+{% block content %}
+  <section class="page-heading">
+    <div>
+      <p class="eyebrow">project form</p>
+      <h1>{{ page_title }}</h1>
+      <p class="text-muted mb-0">仅填写 mock/demo/sample 项目信息。</p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{{ url_for('projects.index') }}">返回列表</a>
+  </section>
+
+  <section class="panel form-panel">
+    <form method="post" class="vstack gap-3">
+      <div>
+        <label class="form-label" for="name">项目名称</label>
+        <input
+          class="form-control"
+          id="name"
+          name="name"
+          type="text"
+          value="{{ project.name if project else '' }}"
+          placeholder="Mock Audio Project"
+          required
+        >
+      </div>
+
+      <div>
+        <label class="form-label" for="code">项目编码</label>
+        <input
+          class="form-control"
+          id="code"
+          name="code"
+          type="text"
+          value="{{ project.code if project else '' }}"
+          placeholder="MOCK-AUDIO-001"
+          required
+        >
+      </div>
+
+      <div>
+        <label class="form-label" for="status">项目状态</label>
+        <select class="form-select" id="status" name="status">
+          {% for status in statuses %}
+            <option value="{{ status }}" {% if project and project.status == status %}selected{% endif %}>{{ status }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <label class="form-label" for="description">项目描述</label>
+        <textarea
+          class="form-control"
+          id="description"
+          name="description"
+          rows="5"
+          placeholder="Sample description for a mock audio testing project."
+        >{{ project.description if project else '' }}</textarea>
+      </div>
+
+      <div class="d-flex flex-wrap gap-2">
+        <button class="btn btn-primary" type="submit">保存</button>
+        <a class="btn btn-outline-secondary" href="{{ url_for('projects.index') }}">取消</a>
+      </div>
+    </form>
+  </section>
+{% endblock %}

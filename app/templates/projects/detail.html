@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project.name }} - 项目详情{% endblock %}
+
+{% block content %}
+  <section class="page-heading">
+    <div>
+      <p class="eyebrow">project detail</p>
+      <h1>{{ project.name }}</h1>
+      <p class="text-muted mb-0"><code>{{ project.code }}</code></p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-primary" href="{{ url_for('projects.edit', project_id=project.id) }}">编辑项目</a>
+      <a class="btn btn-outline-secondary" href="{{ url_for('projects.index') }}">返回列表</a>
+      <form action="{{ url_for('projects.delete', project_id=project.id) }}" method="post" onsubmit="return confirm('确认删除该 mock/demo/sample 项目？');">
+        <button class="btn btn-outline-danger" type="submit">删除项目</button>
+      </form>
+    </div>
+  </section>
+
+  <section class="panel detail-grid">
+    <div>
+      <span>状态</span>
+      <strong>{{ project.status }}</strong>
+    </div>
+    <div>
+      <span>创建时间</span>
+      <strong>{{ project.created_at.strftime("%Y-%m-%d %H:%M") if project.created_at else "-" }}</strong>
+    </div>
+    <div>
+      <span>更新时间</span>
+      <strong>{{ project.updated_at.strftime("%Y-%m-%d %H:%M") if project.updated_at else "-" }}</strong>
+    </div>
+  </section>
+
+  <section class="panel mt-3">
+    <div class="panel-header">
+      <h2>项目描述</h2>
+    </div>
+    {% if project.description %}
+      <p class="mb-0">{{ project.description }}</p>
+    {% else %}
+      <p class="text-muted mb-0">暂无项目描述。</p>
+    {% endif %}
+  </section>
+{% endblock %}

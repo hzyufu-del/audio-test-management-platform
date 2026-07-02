@@ -117,6 +117,39 @@ body {
   width: 100%;
 }
 
+.form-panel {
+  max-width: 760px;
+}
+
+.empty-state {
+  border: 1px dashed var(--app-border);
+  border-radius: 8px;
+  padding: 32px;
+  text-align: center;
+}
+
+.empty-state h2 {
+  font-size: 1.15rem;
+  letter-spacing: 0;
+}
+
+.detail-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.detail-grid span {
+  color: var(--app-muted);
+  display: block;
+  font-size: 0.85rem;
+  margin-bottom: 4px;
+}
+
+.detail-grid strong {
+  font-size: 1rem;
+}
+
 .btn {
   border-radius: 6px;
 }
@@ -135,5 +168,9 @@ body {
   .page-heading .btn,
   .page-heading .d-flex {
     width: 100%;
+  }
+
+  .detail-grid {
+    grid-template-columns: 1fr;
   }
 }

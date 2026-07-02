@@ -34,6 +34,12 @@ class Project(db.Model):
     description = db.Column(db.Text)
     status = db.Column(db.String(30), default="active", nullable=False)
     created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+        nullable=False,
+    )
 
     versions = db.relationship("Version", back_populates="project", lazy=True)
     testcases = db.relationship("TestCase", back_populates="project", lazy=True)

@@ -1,0 +1,139 @@
+:root {
+  --app-bg: #f5f7fb;
+  --app-ink: #172033;
+  --app-muted: #667085;
+  --app-border: #d8dee9;
+  --app-panel: #ffffff;
+  --app-blue: #2458d3;
+  --app-green: #14835b;
+  --app-amber: #c98200;
+}
+
+body {
+  background: var(--app-bg);
+  color: var(--app-ink);
+}
+
+.app-navbar {
+  background: #172033;
+}
+
+.app-shell {
+  padding: 24px;
+}
+
+.page-heading {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.page-heading h1,
+.auth-panel h1 {
+  font-size: 1.75rem;
+  letter-spacing: 0;
+  margin: 0 0 6px;
+}
+
+.eyebrow {
+  color: var(--app-blue);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+.stat-card,
+.panel,
+.auth-panel {
+  background: var(--app-panel);
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  box-shadow: 0 10px 24px rgba(23, 32, 51, 0.06);
+}
+
+.stat-card {
+  display: grid;
+  gap: 8px;
+  min-height: 132px;
+  padding: 20px;
+}
+
+.stat-card span {
+  color: var(--app-muted);
+  font-size: 0.92rem;
+}
+
+.stat-card strong {
+  font-size: 2.25rem;
+  line-height: 1;
+}
+
+.stat-card small {
+  color: var(--app-green);
+}
+
+.panel {
+  padding: 18px;
+}
+
+.panel-header {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.panel-header h2 {
+  font-size: 1rem;
+  letter-spacing: 0;
+  margin: 0;
+}
+
+.table th {
+  color: var(--app-muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.table td {
+  vertical-align: middle;
+}
+
+.auth-layout {
+  display: grid;
+  min-height: calc(100vh - 140px);
+  place-items: center;
+}
+
+.auth-panel {
+  max-width: 440px;
+  padding: 28px;
+  width: 100%;
+}
+
+.btn {
+  border-radius: 6px;
+}
+
+@media (max-width: 768px) {
+  .app-shell {
+    padding: 16px;
+  }
+
+  .page-heading,
+  .panel-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .page-heading .btn,
+  .page-heading .d-flex {
+    width: 100%;
+  }
+}

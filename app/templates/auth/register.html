@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}注册 - 消费电子音频产品测试管理与自动化辅助平台{% endblock %}
+
+{% block content %}
+  <section class="auth-layout">
+    <div class="auth-panel">
+      <p class="eyebrow">demo account</p>
+      <h1>注册</h1>
+      <p class="text-muted">只创建本地 demo 用户，不包含任何真实团队或公司信息。</p>
+      <form method="post" class="vstack gap-3">
+        <div>
+          <label class="form-label" for="username">用户名</label>
+          <input class="form-control" id="username" name="username" type="text" placeholder="demo_tester" autocomplete="username">
+        </div>
+        <div>
+          <label class="form-label" for="email">邮箱</label>
+          <input class="form-control" id="email" name="email" type="email" placeholder="demo@example.com" autocomplete="email">
+        </div>
+        <div>
+          <label class="form-label" for="password">密码</label>
+          <input class="form-control" id="password" name="password" type="password" autocomplete="new-password">
+        </div>
+        <button class="btn btn-primary" type="submit">注册</button>
+      </form>
+      <p class="mt-3 mb-0 small">已有 demo 账号？<a href="{{ url_for('auth.login') }}">去登录</a></p>
+    </div>
+  </section>
+{% endblock %}

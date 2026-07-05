@@ -13,6 +13,17 @@
   </section>
 
   <section class="panel form-panel">
+    {% if errors %}
+      <div class="alert alert-warning" role="alert">
+        <strong>请检查项目表单：</strong>
+        <ul class="mb-0 mt-2">
+          {% for error in errors %}
+            <li>{{ error }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
     <form method="post" class="vstack gap-3">
       <div>
         <label class="form-label" for="name">项目名称</label>
@@ -21,9 +32,8 @@
           id="name"
           name="name"
           type="text"
-          value="{{ project.name if project else '' }}"
+          value="{{ form_data.name if form_data else (project.name if project else '') }}"
           placeholder="Mock Audio Project"
-          required
         >
       </div>
 
@@ -34,9 +44,8 @@
           id="code"
           name="code"
           type="text"
-          value="{{ project.code if project else '' }}"
+          value="{{ form_data.code if form_data else (project.code if project else '') }}"
           placeholder="MOCK-AUDIO-001"
-          required
         >
       </div>
 
@@ -44,7 +53,7 @@
         <label class="form-label" for="status">项目状态</label>
         <select class="form-select" id="status" name="status">
           {% for status in statuses %}
-            <option value="{{ status }}" {% if project and project.status == status %}selected{% endif %}>{{ status }}</option>
+            <option value="{{ status }}" {% if selected_status == status %}selected{% endif %}>{{ status }}</option>
           {% endfor %}
         </select>
       </div>
@@ -57,7 +66,7 @@
           name="description"
           rows="5"
           placeholder="Sample description for a mock audio testing project."
-        >{{ project.description if project else '' }}</textarea>
+        >{{ form_data.description if form_data else (project.description if project else '') }}</textarea>
       </div>
 
       <div class="d-flex flex-wrap gap-2">

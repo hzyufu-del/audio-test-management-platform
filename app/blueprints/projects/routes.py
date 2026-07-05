@@ -17,15 +17,24 @@ def index():
 
 @bp.route("/new", methods=["GET", "POST"])
 def create():
+    form_data = None
+    errors = []
+
     if request.method == "POST":
+        form_data = get_project_form_data()
         project = Project()
-        if save_project_from_form(project):
+        errors = validate_project_form(form_data, project)
+
+        if not errors and save_project(project, form_data, errors):
             flash("项目已创建。", "success")
             return redirect(url_for("projects.detail", project_id=project.id))
 
     return render_template(
         "projects/form.html",
+        errors=errors,
+        form_data=form_data,
         project=None,
+        selected_status=get_selected_status(form_data, None),
         statuses=PROJECT_STATUSES,
         page_title="新增项目",
     )
@@ -40,14 +49,23 @@ def detail(project_id):
 @bp.route("/<int:project_id>/edit", methods=["GET", "POST"])
 def edit(project_id):
     project = db.get_or_404(Project, project_id)
+    form_data = None
+    errors = []
 
-    if request.method == "POST" and save_project_from_form(project):
-        flash("项目已更新。", "success")
-        return redirect(url_for("projects.detail", project_id=project.id))
+    if request.method == "POST":
+        form_data = get_project_form_data()
+        errors = validate_project_form(form_data, project)
+
+        if not errors and save_project(project, form_data, errors):
+            flash("项目已更新。", "success")
+            return redirect(url_for("projects.detail", project_id=project.id))
 
     return render_template(
         "projects/form.html",
+        errors=errors,
+        form_data=form_data,
         project=project,
+        selected_status=get_selected_status(form_data, project),
         statuses=PROJECT_STATUSES,
         page_title="编辑项目",
     )
@@ -69,29 +87,58 @@ def delete(project_id):
     return redirect(url_for("projects.index"))
 
 
-def save_project_from_form(project):
-    name = request.form.get("name", "").strip()
-    code = request.form.get("code", "").strip().upper()
-    description = request.form.get("description", "").strip()
-    status = request.form.get("status", "active").strip()
+def get_project_form_data():
+    return {
+        "name": request.form.get("name", "").strip(),
+        "code": request.form.get("code", "").strip().upper(),
+        "description": request.form.get("description", "").strip(),
+        "status": request.form.get("status", "active").strip(),
+    }
 
-    if not name or not code:
-        flash("项目名称和项目编码不能为空。", "warning")
-        return False
 
-    if status not in PROJECT_STATUSES:
-        flash("项目状态只能是 active 或 archived。", "warning")
-        return False
+def validate_project_form(form_data, project):
+    errors = []
 
-    existing_project = Project.query.filter(Project.code == code, Project.id != project.id).first()
-    if existing_project:
-        flash("项目编码已存在，请使用另一个 mock/demo/sample 编码。", "warning")
-        return False
+    if not form_data["name"]:
+        errors.append("项目名称不能为空。")
 
-    project.name = name
-    project.code = code
-    project.description = description
-    project.status = status
+    if not form_data["code"]:
+        errors.append("项目编码不能为空。")
+
+    if form_data["status"] not in PROJECT_STATUSES:
+        errors.append("项目状态只能是 active 或 archived。")
+
+    if form_data["code"]:
+        existing_project = Project.query.filter(
+            Project.code == form_data["code"],
+            Project.id != project.id,
+        ).first()
+        if existing_project:
+            errors.append("项目编码已存在，请使用另一个 mock/demo/sample 编码。")
+
+    return errors
+
+
+def save_project(project, form_data, errors):
+    project.name = form_data["name"]
+    project.code = form_data["code"]
+    project.description = form_data["description"]
+    project.status = form_data["status"]
     db.session.add(project)
-    db.session.commit()
+
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        errors.append("项目编码已存在，请使用另一个 mock/demo/sample 编码。")
+        return False
+
     return True
+
+
+def get_selected_status(form_data, project):
+    if form_data:
+        return form_data["status"]
+    if project:
+        return project.status
+    return "active"

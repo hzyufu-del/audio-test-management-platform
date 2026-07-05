@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}版本管理 - 消费电子音频产品测试管理与自动化辅助平台{% endblock %}
+
+{% block content %}
+  <section class="page-heading">
+    <div>
+      <p class="eyebrow">version crud</p>
+      <h1>版本管理</h1>
+      <p class="text-muted mb-0">维护 mock/demo/sample 测试版本，并关联所属项目。</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-primary" href="{{ url_for('versions.create') }}">新增版本</a>
+      <a class="btn btn-outline-secondary" href="{{ url_for('projects.index') }}">返回项目列表</a>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-header">
+      <h2>版本列表</h2>
+      <span class="text-muted small">共 {{ versions|length }} 个版本</span>
+    </div>
+
+    {% if versions %}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th>版本名称</th>
+              <th>版本编码</th>
+              <th>所属项目</th>
+              <th>状态</th>
+              <th>创建时间</th>
+              <th class="text-end">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for version in versions %}
+              <tr>
+                <td>{{ version.name }}</td>
+                <td><code>{{ version.code }}</code></td>
+                <td>{{ version.project.name }}</td>
+                <td><span class="badge text-bg-light">{{ version.status }}</span></td>
+                <td>{{ version.created_at.strftime("%Y-%m-%d %H:%M") if version.created_at else "-" }}</td>
+                <td class="text-end">
+                  <a class="btn btn-sm btn-outline-primary" href="{{ url_for('versions.detail', version_id=version.id) }}">查看</a>
+                  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('versions.edit', version_id=version.id) }}">编辑</a>
+                  <form class="d-inline" action="{{ url_for('versions.delete', version_id=version.id) }}" method="post" onsubmit="return confirm('确认删除该 mock/demo/sample 版本？');">
+                    <button class="btn btn-sm btn-outline-danger" type="submit">删除</button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <h2>暂无版本</h2>
+        <p>可以先创建一个 mock/demo/sample 版本，用于后续 Checklist 和执行记录演示。</p>
+        <a class="btn btn-primary" href="{{ url_for('versions.create') }}">新增版本</a>
+      </div>
+    {% endif %}
+  </section>
+{% endblock %}

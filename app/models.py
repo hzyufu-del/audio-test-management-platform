@@ -51,13 +51,25 @@ class Project(db.Model):
 
 
 class Version(db.Model):
+    __table_args__ = (
+        db.UniqueConstraint("project_id", "code", name="uq_version_project_code"),
+    )
+
     id = db.Column(db.Integer, primary_key=True)
     project_id = db.Column(db.Integer, db.ForeignKey("project.id"), nullable=False)
     name = db.Column(db.String(120), nullable=False)
+    code = db.Column(db.String(80), nullable=False)
+    description = db.Column(db.Text)
     release_type = db.Column(db.String(40), default="sample", nullable=False)
     status = db.Column(db.String(30), default="planning", nullable=False)
     planned_test_date = db.Column(db.Date)
     created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+        nullable=False,
+    )
 
     project = db.relationship("Project", back_populates="versions")
     executions = db.relationship("TestExecution", back_populates="version", lazy=True)

@@ -98,11 +98,13 @@ def seed_demo_data():
         db.session.add(project)
         db.session.flush()
 
-    version = Version.query.filter_by(project_id=project.id, name="demo_build_alpha").first()
+    version = Version.query.filter_by(project_id=project.id, code="FW_DEMO_ALPHA").first()
     if version is None:
         version = Version(
             project_id=project.id,
-            name="demo_build_alpha",
+            name="Demo Firmware Alpha",
+            code="FW_DEMO_ALPHA",
+            description="Sample version record for local demo use.",
             release_type="sample",
             status="testing",
         )

@@ -2,7 +2,7 @@ import pytest
 
 from app import create_app
 from app.extensions import db
-from app.models import Project, Version
+from app.models import Project, TestCase as ChecklistTestCase, Version
 
 
 @pytest.fixture()
@@ -252,3 +252,41 @@ def test_version_can_be_deleted(client, app, project):
 
     with app.app_context():
         assert db.session.get(Version, version_id) is None
+
+
+def test_version_delete_with_test_cases_fails_gracefully(client, app, project):
+    with app.app_context():
+        version = Version(
+            project_id=project,
+            name="Demo Firmware With TestCase",
+            code="FW_DEMO_WITH_TESTCASE",
+            description="Sample version with related testcase.",
+            status="testing",
+        )
+        db.session.add(version)
+        db.session.flush()
+        test_case = ChecklistTestCase(
+            project_id=project,
+            version_id=version.id,
+            title="Sample Linked TestCase",
+            code="TC_AUDIO_LINKED",
+            module="Audio",
+            priority="P1",
+            steps="Run sample linked steps.",
+            expected_result="Sample linked result is recorded.",
+            status="active",
+        )
+        db.session.add(test_case)
+        db.session.commit()
+        version_id = version.id
+        test_case_id = test_case.id
+
+    response = client.post(f"/versions/{version_id}/delete", follow_redirects=True)
+    page = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "该版本下已有测试用例，不能直接删除" in page
+
+    with app.app_context():
+        assert db.session.get(Version, version_id) is not None
+        assert db.session.get(ChecklistTestCase, test_case_id) is not None

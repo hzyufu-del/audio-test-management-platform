@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}执行记录详情 - 消费电子音频产品测试管理与自动化辅助平台{% endblock %}
+
+{% block content %}
+  <section class="page-heading">
+    <div>
+      <p class="eyebrow">test execution detail</p>
+      <h1>执行记录详情</h1>
+      <p class="text-muted mb-0">{{ execution.testcase.code }} - {{ execution.testcase.title }}</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-primary" href="{{ url_for('executions.edit', execution_id=execution.id) }}">编辑执行记录</a>
+      <a class="btn btn-outline-secondary" href="{{ url_for('executions.index') }}">返回执行记录列表</a>
+      <a class="btn btn-outline-secondary" href="{{ url_for('testcases.detail', test_case_id=execution.test_case_id) }}">返回所属用例</a>
+      <form action="{{ url_for('executions.delete', execution_id=execution.id) }}" method="post" onsubmit="return confirm('确认删除该 mock/demo/sample 执行记录？');">
+        <button class="btn btn-outline-danger" type="submit">删除执行记录</button>
+      </form>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="detail-grid">
+      <div>
+        <span>Project</span>
+        <strong>{{ execution.testcase.project.name }}</strong>
+      </div>
+      <div>
+        <span>Version</span>
+        <strong>{{ execution.testcase.version.name }}</strong>
+      </div>
+      <div>
+        <span>TestCase</span>
+        <strong>{{ execution.testcase.code }}</strong>
+      </div>
+      <div>
+        <span>执行结果</span>
+        {% if execution.result == "failed" %}
+          <strong class="badge text-bg-danger">{{ execution.result }}</strong>
+        {% elif execution.result == "passed" %}
+          <strong class="badge text-bg-success">{{ execution.result }}</strong>
+        {% else %}
+          <strong class="badge text-bg-warning">{{ execution.result }}</strong>
+        {% endif %}
+      </div>
+      <div>
+        <span>执行人</span>
+        <strong>{{ execution.tester }}</strong>
+      </div>
+      <div>
+        <span>环境</span>
+        <strong>{{ execution.environment or "-" }}</strong>
+      </div>
+      <div>
+        <span>执行时间</span>
+        <strong>{{ execution.executed_at.strftime("%Y-%m-%d %H:%M") if execution.executed_at else "-" }}</strong>
+      </div>
+      <div>
+        <span>创建时间</span>
+        <strong>{{ execution.created_at.strftime("%Y-%m-%d %H:%M") if execution.created_at else "-" }}</strong>
+      </div>
+      <div>
+        <span>更新时间</span>
+        <strong>{{ execution.updated_at.strftime("%Y-%m-%d %H:%M") if execution.updated_at else "-" }}</strong>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel mt-3">
+    <div class="panel-header">
+      <h2>实际结果</h2>
+    </div>
+    <p class="mb-0">{{ execution.actual_result or "暂无实际结果。" }}</p>
+  </section>
+
+  <section class="panel mt-3">
+    <div class="panel-header">
+      <h2>备注</h2>
+    </div>
+    <p class="mb-0">{{ execution.notes or "暂无备注。" }}</p>
+  </section>
+{% endblock %}

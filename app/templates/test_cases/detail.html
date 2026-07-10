@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}{{ test_case.title }} - 用例详情{% endblock %}
+
+{% block content %}
+  <section class="page-heading">
+    <div>
+      <p class="eyebrow">test case detail</p>
+      <h1>{{ test_case.title }}</h1>
+      <p class="text-muted mb-0"><code>{{ test_case.code }}</code></p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-primary" href="{{ url_for('testcases.edit', test_case_id=test_case.id) }}">编辑用例</a>
+      <a class="btn btn-outline-secondary" href="{{ url_for('testcases.index') }}">返回用例列表</a>
+      <a class="btn btn-outline-secondary" href="{{ url_for('versions.detail', version_id=test_case.version_id) }}">返回所属版本</a>
+      <form action="{{ url_for('testcases.delete', test_case_id=test_case.id) }}" method="post" onsubmit="return confirm('确认删除该 mock/demo/sample 用例？');">
+        <button class="btn btn-outline-danger" type="submit">删除用例</button>
+      </form>
+    </div>
+  </section>
+
+  <section class="panel detail-grid">
+    <div>
+      <span>Project</span>
+      <strong>{{ test_case.project.name }}</strong>
+    </div>
+    <div>
+      <span>Version</span>
+      <strong>{{ test_case.version.name }}</strong>
+    </div>
+    <div>
+      <span>模块</span>
+      <strong>{{ test_case.module }}</strong>
+    </div>
+    <div>
+      <span>优先级</span>
+      <strong>{{ test_case.priority }}</strong>
+    </div>
+    <div>
+      <span>状态</span>
+      <strong>{{ test_case.status }}</strong>
+    </div>
+    <div>
+      <span>更新时间</span>
+      <strong>{{ test_case.updated_at.strftime("%Y-%m-%d %H:%M") if test_case.updated_at else "-" }}</strong>
+    </div>
+  </section>
+
+  <section class="panel mt-3">
+    <div class="panel-header">
+      <h2>前置条件</h2>
+    </div>
+    <p class="mb-0">{{ test_case.precondition or "暂无前置条件。" }}</p>
+  </section>
+
+  <section class="panel mt-3">
+    <div class="panel-header">
+      <h2>测试步骤</h2>
+    </div>
+    <p class="mb-0">{{ test_case.steps }}</p>
+  </section>
+
+  <section class="panel mt-3">
+    <div class="panel-header">
+      <h2>预期结果</h2>
+    </div>
+    <p class="mb-0">{{ test_case.expected_result }}</p>
+  </section>
+{% endblock %}

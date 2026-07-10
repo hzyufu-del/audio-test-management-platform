@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }} - 消费电子音频产品测试管理与自动化辅助平台{% endblock %}
+
+{% block content %}
+  <section class="page-heading">
+    <div>
+      <p class="eyebrow">test case form</p>
+      <h1>{{ page_title }}</h1>
+      <p class="text-muted mb-0">仅填写 mock/demo/sample 测试用例信息。</p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{{ url_for('testcases.index') }}">返回用例列表</a>
+  </section>
+
+  <section class="panel form-panel">
+    {% if errors %}
+      <div class="alert alert-warning" role="alert">
+        <strong>请检查用例表单：</strong>
+        <ul class="mb-0 mt-2">
+          {% for error in errors %}
+            <li>{{ error }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    <form method="post" class="vstack gap-3">
+      <div>
+        <label class="form-label" for="version_id">所属版本</label>
+        <select class="form-select" id="version_id" name="version_id">
+          <option value="">请选择版本</option>
+          {% for version in versions %}
+            <option value="{{ version.id }}" {% if selected_version_id|string == version.id|string %}selected{% endif %}>
+              {{ version.project.name }} / {{ version.name }} ({{ version.code }})
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <label class="form-label" for="title">用例标题</label>
+        <input
+          class="form-control"
+          id="title"
+          name="title"
+          type="text"
+          value="{{ form_data.title if form_data else (test_case.title if test_case else '') }}"
+          placeholder="Sample Audio Playback Checklist"
+        >
+      </div>
+
+      <div>
+        <label class="form-label" for="code">用例编号</label>
+        <input
+          class="form-control"
+          id="code"
+          name="code"
+          type="text"
+          value="{{ form_data.code if form_data else (test_case.code if test_case else '') }}"
+          placeholder="TC_AUDIO_001"
+        >
+      </div>
+
+      <div>
+        <label class="form-label" for="module">所属模块</label>
+        <input
+          class="form-control"
+          id="module"
+          name="module"
+          type="text"
+          value="{{ form_data.module if form_data else (test_case.module if test_case else '') }}"
+          placeholder="Audio"
+        >
+      </div>
+
+      <div class="row g-3">
+        <div class="col-12 col-md-6">
+          <label class="form-label" for="priority">优先级</label>
+          <select class="form-select" id="priority" name="priority">
+            {% for priority in priorities %}
+              <option value="{{ priority }}" {% if selected_priority == priority %}selected{% endif %}>{{ priority }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label" for="status">用例状态</label>
+          <select class="form-select" id="status" name="status">
+            {% for status in statuses %}
+              <option value="{{ status }}" {% if selected_status == status %}selected{% endif %}>{{ status }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label class="form-label" for="precondition">前置条件</label>
+        <textarea class="form-control" id="precondition" name="precondition" rows="3" placeholder="Use mock audio device state.">{{ form_data.precondition if form_data else (test_case.precondition if test_case else '') }}</textarea>
+      </div>
+
+      <div>
+        <label class="form-label" for="steps">测试步骤</label>
+        <textarea class="form-control" id="steps" name="steps" rows="5" placeholder="Open demo playback flow and check sample output.">{{ form_data.steps if form_data else (test_case.steps if test_case else '') }}</textarea>
+      </div>
+
+      <div>
+        <label class="form-label" for="expected_result">预期结果</label>
+        <textarea class="form-control" id="expected_result" name="expected_result" rows="4" placeholder="Sample playback result is recorded.">{{ form_data.expected_result if form_data else (test_case.expected_result if test_case else '') }}</textarea>
+      </div>
+
+      <div class="d-flex flex-wrap gap-2">
+        <button class="btn btn-primary" type="submit">保存</button>
+        <a class="btn btn-outline-secondary" href="{{ url_for('testcases.index') }}">取消</a>
+      </div>
+    </form>
+  </section>
+{% endblock %}

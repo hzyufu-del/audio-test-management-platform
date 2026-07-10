@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }} - 消费电子音频产品测试管理与自动化辅助平台{% endblock %}
+
+{% block content %}
+  <section class="page-heading">
+    <div>
+      <p class="eyebrow">test execution form</p>
+      <h1>{{ page_title }}</h1>
+      <p class="text-muted mb-0">仅填写 mock/demo/sample 执行记录信息。</p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{{ url_for('executions.index') }}">返回执行记录列表</a>
+  </section>
+
+  <section class="panel form-panel">
+    {% if errors %}
+      <div class="alert alert-warning" role="alert">
+        <strong>请检查执行记录表单：</strong>
+        <ul class="mb-0 mt-2">
+          {% for error in errors %}
+            <li>{{ error }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    <form method="post" class="vstack gap-3">
+      <div>
+        <label class="form-label" for="test_case_id">所属用例</label>
+        <select class="form-select" id="test_case_id" name="test_case_id">
+          <option value="">请选择用例</option>
+          {% for test_case in test_cases %}
+            <option value="{{ test_case.id }}" {% if selected_test_case_id|string == test_case.id|string %}selected{% endif %}>
+              {{ test_case.project.name }} / {{ test_case.version.name }} / {{ test_case.code }} - {{ test_case.title }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="row g-3">
+        <div class="col-12 col-md-6">
+          <label class="form-label" for="result">执行结果</label>
+          <select class="form-select" id="result" name="result">
+            <option value="">请选择结果</option>
+            {% for result in results %}
+              <option value="{{ result }}" {% if selected_result == result %}selected{% endif %}>{{ result }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label" for="executed_at">执行时间</label>
+          <input
+            class="form-control"
+            id="executed_at"
+            name="executed_at"
+            type="datetime-local"
+            value="{{ selected_executed_at }}"
+          >
+        </div>
+      </div>
+
+      <div class="row g-3">
+        <div class="col-12 col-md-6">
+          <label class="form-label" for="tester">执行人</label>
+          <input
+            class="form-control"
+            id="tester"
+            name="tester"
+            type="text"
+            value="{{ form_data.tester if form_data else (execution.tester if execution else '') }}"
+            placeholder="Demo Tester"
+          >
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label" for="environment">测试环境</label>
+          <input
+            class="form-control"
+            id="environment"
+            name="environment"
+            type="text"
+            value="{{ form_data.environment if form_data else (execution.environment if execution else '') }}"
+            placeholder="Android Demo Env"
+          >
+        </div>
+      </div>
+
+      <div>
+        <label class="form-label" for="actual_result">实际结果</label>
+        <textarea class="form-control" id="actual_result" name="actual_result" rows="4" placeholder="Demo actual result is recorded.">{{ form_data.actual_result if form_data else (execution.actual_result if execution else '') }}</textarea>
+      </div>
+
+      <div>
+        <label class="form-label" for="notes">备注</label>
+        <textarea class="form-control" id="notes" name="notes" rows="3" placeholder="Sample execution notes.">{{ form_data.notes if form_data else (execution.notes if execution else '') }}</textarea>
+      </div>
+
+      <div class="d-flex flex-wrap gap-2">
+        <button class="btn btn-primary" type="submit">保存</button>
+        <a class="btn btn-outline-secondary" href="{{ url_for('executions.index') }}">取消</a>
+      </div>
+    </form>
+  </section>
+{% endblock %}

@@ -112,34 +112,59 @@ def seed_demo_data():
         db.session.flush()
 
     testcase = TestCase.query.filter_by(
-        project_id=project.id,
-        title="Sample playback checklist",
+        version_id=version.id,
+        code="TC_AUDIO_001",
     ).first()
     if testcase is None:
         testcase = TestCase(
             project_id=project.id,
-            title="Sample playback checklist",
-            module="播放",
+            version_id=version.id,
+            title="Sample Audio Playback Checklist",
+            code="TC_AUDIO_001",
+            module="Audio",
             priority="P1",
             case_type="checklist",
             precondition="Use mock audio device state only.",
             steps="Open sample audio playback flow and check basic output.",
             expected_result="Playback status is recorded as a demo result.",
+            status="active",
         )
         db.session.add(testcase)
         db.session.flush()
 
-    execution = TestExecution.query.filter_by(
-        testcase_id=testcase.id,
+    bluetooth_testcase = TestCase.query.filter_by(
         version_id=version.id,
-        executor_name="demo_tester",
+        code="TC_BT_001",
+    ).first()
+    if bluetooth_testcase is None:
+        bluetooth_testcase = TestCase(
+            project_id=project.id,
+            version_id=version.id,
+            title="Sample Bluetooth Reconnect Checklist",
+            code="TC_BT_001",
+            module="Bluetooth",
+            priority="P2",
+            case_type="checklist",
+            precondition="Use mock paired device state only.",
+            steps="Trigger sample reconnect flow and observe demo status.",
+            expected_result="Reconnect result is recorded as sample data.",
+            status="draft",
+        )
+        db.session.add(bluetooth_testcase)
+
+    execution = TestExecution.query.filter_by(
+        test_case_id=testcase.id,
+        version_id=version.id,
+        tester="Demo Tester",
     ).first()
     if execution is None:
         execution = TestExecution(
-            testcase_id=testcase.id,
+            test_case_id=testcase.id,
             version_id=version.id,
-            executor_name="demo_tester",
-            result="pass",
+            tester="Demo Tester",
+            environment="Android Demo Env",
+            result="passed",
+            actual_result="Demo actual result is recorded.",
             notes="Mock execution record for local demo use.",
         )
         db.session.add(execution)

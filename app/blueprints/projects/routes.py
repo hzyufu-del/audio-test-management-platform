@@ -75,6 +75,10 @@ def edit(project_id):
 def delete(project_id):
     project = db.get_or_404(Project, project_id)
 
+    if project.versions:
+        flash("该项目下已有版本，不能直接删除。请先归档项目或清理关联版本。", "warning")
+        return redirect(url_for("projects.detail", project_id=project.id))
+
     try:
         db.session.delete(project)
         db.session.commit()

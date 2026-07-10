@@ -73,6 +73,10 @@ def edit(version_id):
 def delete(version_id):
     version = db.get_or_404(Version, version_id)
 
+    if version.testcases:
+        flash("该版本下已有测试用例，不能直接删除。请先归档版本或清理关联用例。", "warning")
+        return redirect(url_for("versions.detail", version_id=version.id))
+
     try:
         db.session.delete(version)
         db.session.commit()

@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}执行记录管理 - 消费电子音频产品测试管理与自动化辅助平台{% endblock %}
+
+{% block content %}
+  <section class="page-heading">
+    <div>
+      <p class="eyebrow">test execution crud</p>
+      <h1>执行记录管理</h1>
+      <p class="text-muted mb-0">记录 mock/demo/sample 用例执行结果，并关联所属用例。</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-primary" href="{{ url_for('executions.create') }}">新增执行记录</a>
+      <a class="btn btn-outline-secondary" href="{{ url_for('testcases.index') }}">返回用例列表</a>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-header">
+      <h2>执行记录列表</h2>
+      <span class="text-muted small">共 {{ executions|length }} 条记录</span>
+    </div>
+
+    {% if executions %}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Project</th>
+              <th>Version</th>
+              <th>用例编号</th>
+              <th>用例标题</th>
+              <th>结果</th>
+              <th>执行人</th>
+              <th>环境</th>
+              <th>执行时间</th>
+              <th class="text-end">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for execution in executions %}
+              <tr>
+                <td>{{ execution.testcase.project.name }}</td>
+                <td>{{ execution.testcase.version.name }}</td>
+                <td><code>{{ execution.testcase.code }}</code></td>
+                <td>{{ execution.testcase.title }}</td>
+                <td>
+                  {% if execution.result == "failed" %}
+                    <span class="badge text-bg-danger">{{ execution.result }}</span>
+                  {% elif execution.result == "passed" %}
+                    <span class="badge text-bg-success">{{ execution.result }}</span>
+                  {% else %}
+                    <span class="badge text-bg-warning">{{ execution.result }}</span>
+                  {% endif %}
+                </td>
+                <td>{{ execution.tester }}</td>
+                <td>{{ execution.environment or "-" }}</td>
+                <td>{{ execution.executed_at.strftime("%Y-%m-%d %H:%M") if execution.executed_at else "-" }}</td>
+                <td class="text-end">
+                  <a class="btn btn-sm btn-outline-primary" href="{{ url_for('executions.detail', execution_id=execution.id) }}">查看</a>
+                  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('executions.edit', execution_id=execution.id) }}">编辑</a>
+                  <form class="d-inline" action="{{ url_for('executions.delete', execution_id=execution.id) }}" method="post" onsubmit="return confirm('确认删除该 mock/demo/sample 执行记录？');">
+                    <button class="btn btn-sm btn-outline-danger" type="submit">删除</button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <h2>暂无执行记录</h2>
+        <p>可以先创建一条 mock/demo/sample 执行记录，用于展示用例执行历史。</p>
+        <a class="btn btn-primary" href="{{ url_for('executions.create') }}">新增执行记录</a>
+      </div>
+    {% endif %}
+  </section>
+{% endblock %}

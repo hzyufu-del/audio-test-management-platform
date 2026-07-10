@@ -2,21 +2,22 @@
 
 中文名：消费电子音频产品测试管理与自动化辅助平台
 
-这是一个用于求职作品集和 GitHub 展示的企业级软件测试项目骨架。项目模拟消费电子音频产品测试团队的日常管理流程，覆盖测试项目、版本、Checklist 用例、执行记录、缺陷记录、模拟 Log 文件和统计看板。
+这是一个用于求职作品集和 GitHub 展示的企业级软件测试项目。项目模拟消费电子音频产品测试团队的日常管理流程，覆盖测试项目、版本、Checklist 用例、执行记录、缺陷记录、模拟 Log 文件和统计看板。
 
 > 数据边界：本项目只使用 mock / demo / sample 数据，不包含任何真实公司项目名、真实版本号、真实 Log、真实测试用例、真实缺陷编号或内部截图。
 
-## 第一版功能
+## 当前已完成功能
 
 - Dashboard 首页：展示项目数、用例数、已执行数、缺陷数等模拟统计卡片。
 - 登录 / 注册页面框架：提供基础账号入口，后续可扩展权限。
-- 项目管理页面框架：列表页和占位按钮。
-- 版本管理页面框架：列表页和占位按钮。
-- Checklist 用例管理页面框架：列表页和占位按钮。
-- 执行记录页面框架：列表页和占位按钮。
+- Project 项目管理：支持列表、新增、详情、编辑、删除、基础表单校验和重复编码校验。
+- Version 版本管理：支持列表、新增、详情、编辑、删除，并关联所属 Project；同一 Project 下版本编码唯一。
+- TestCase 测试用例管理：支持列表、新增、详情、编辑、删除，并关联所属 Version；同一 Version 下用例编号唯一。
+- TestExecution 执行记录管理：支持列表、新增、详情、编辑、删除，并关联所属 TestCase；failed 结果要求填写实际结果。
+- 删除保护：已有 Version 的 Project 不允许直接删除；已有 TestCase 的 Version 不允许直接删除；已有 TestExecution 的 TestCase 不允许直接删除，避免误删重要测试记录。
 - 缺陷管理页面框架：列表页和占位按钮。
 - 模拟 Log 管理页面框架：列表页和占位按钮。
-- 基础 pytest：验证首页可以访问。
+- pytest：覆盖首页访问、Project / Version / TestCase / TestExecution CRUD、表单校验和关联删除保护。
 
 ## 技术栈
 
@@ -64,10 +65,10 @@ audio-test-management-platform/
 - `app/extensions.py`：集中放置 `db`、`migrate`、`login_manager`，避免循环导入。
 - `app/models.py`：基础数据模型，包括 `User`、`Project`、`Version`、`TestCase`、`TestExecution`、`Defect`、`LogFile`。
 - `app/blueprints/`：按业务模块拆分路由，便于后续逐步扩展 CRUD。
-- `app/templates/`：Jinja2 页面模板，包含基础布局、Dashboard、登录注册和通用列表页。
+- `app/templates/`：Jinja2 页面模板，包含基础布局、Dashboard、登录注册，以及 Project / Version / TestCase / TestExecution 页面。
 - `app/static/`：静态资源，目前包含基础 CSS。
 - `migrations/`：Flask-Migrate 迁移目录，后续数据库结构变更放在这里。
-- `tests/`：pytest 测试目录，目前包含首页可访问测试。
+- `tests/`：pytest 测试目录，覆盖首页访问、核心 CRUD、表单校验和删除保护。
 - `config.py`：项目配置，默认使用 SQLite，本地可通过 `.env` 覆盖。
 - `run.py`：本地启动入口。
 - `requirements.txt`：Python 依赖清单。
@@ -102,7 +103,7 @@ http://127.0.0.1:5000
 
 ## 数据库说明
 
-当前第一版以骨架和页面框架为主，页面列表使用 mock 数据。模型已经提前放在 `app/models.py` 中，后续可以逐步把页面数据改为数据库查询。
+当前已使用 Flask-Migrate 管理数据库结构。Project、Version、TestCase、TestExecution 已接入数据库 CRUD；`init-db` 仅用于插入本地 mock/demo/sample 示例数据。
 
 创建或更新本地 SQLite 表结构：
 
@@ -132,7 +133,8 @@ flask --app run.py init-db
 
 ## 后续扩展建议
 
-- 为项目、版本、用例、执行记录、缺陷、Log 增加增删改查。
+- 进入 Defect 缺陷模块，实现缺陷记录与 Project / Version / TestCase / TestExecution 的关联。
+- 为 Log 增加完整 CRUD。
 - 增加搜索、筛选、分页和导入导出。
 - 将 Dashboard 统计从 mock 数据切换为数据库聚合查询。
 - 为缺陷和 Log 增加关联关系。

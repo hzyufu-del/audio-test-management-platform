@@ -2,7 +2,7 @@ import pytest
 
 from app import create_app
 from app.extensions import db
-from app.models import Project
+from app.models import Project, Version
 
 
 @pytest.fixture()
@@ -244,3 +244,36 @@ def test_project_can_be_deleted(client, app):
 
     with app.app_context():
         assert db.session.get(Project, project_id) is None
+
+
+def test_project_delete_with_versions_fails_gracefully(client, app):
+    with app.app_context():
+        project = Project(
+            name="Mock Project With Version",
+            code="MOCK-PROJECT-WITH-VERSION",
+            description="Demo project with related version.",
+            status="active",
+        )
+        db.session.add(project)
+        db.session.flush()
+        version = Version(
+            project_id=project.id,
+            name="Demo Firmware Linked Version",
+            code="FW_DEMO_LINKED",
+            description="Sample linked version.",
+            status="planned",
+        )
+        db.session.add(version)
+        db.session.commit()
+        project_id = project.id
+        version_id = version.id
+
+    response = client.post(f"/projects/{project_id}/delete", follow_redirects=True)
+    page = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "该项目下已有版本，不能直接删除" in page
+
+    with app.app_context():
+        assert db.session.get(Project, project_id) is not None
+        assert db.session.get(Version, version_id) is not None

@@ -2,7 +2,7 @@ from sqlalchemy import inspect
 
 from app import create_app
 from app.extensions import db
-from app.models import Project, TestCase as ChecklistTestCase, User
+from app.models import Project, TestCase as ChecklistTestCase, TestExecution as ExecutionRecord, User
 
 
 def make_app(tmp_path):
@@ -41,4 +41,5 @@ def test_init_db_seeds_demo_data_when_schema_exists(tmp_path):
     with app.app_context():
         assert User.query.filter_by(email="demo@example.com").count() == 1
         assert Project.query.filter_by(code="MOCK-AUDIO-01").count() == 1
-        assert ChecklistTestCase.query.filter_by(title="Sample playback checklist").count() == 1
+        assert ChecklistTestCase.query.filter_by(code="TC_AUDIO_001").count() == 1
+        assert ExecutionRecord.query.filter_by(result="passed", tester="Demo Tester").count() == 1

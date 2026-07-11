@@ -119,7 +119,6 @@ def test_test_case_detail_page_is_accessible(client, app, version):
     with app.app_context():
         test_case = ChecklistTestCase(
             version_id=version,
-            project_id=db.session.get(Version, version).project_id,
             title="Sample TestCase Detail",
             code="TC_AUDIO_DETAIL",
             module="Audio",
@@ -208,7 +207,6 @@ def test_test_case_create_fails_when_code_is_duplicated_in_same_version(client, 
     with app.app_context():
         test_case = ChecklistTestCase(
             version_id=version,
-            project_id=db.session.get(Version, version).project_id,
             title="Sample Existing TestCase",
             code="TC_AUDIO_DUPLICATE",
             module="Audio",
@@ -239,7 +237,6 @@ def test_test_case_create_allows_same_code_in_different_versions(client, app, ve
     with app.app_context():
         test_case = ChecklistTestCase(
             version_id=version,
-            project_id=db.session.get(Version, version).project_id,
             title="Sample Existing Shared Code TestCase",
             code="TC_AUDIO_SHARED",
             module="Audio",
@@ -304,7 +301,6 @@ def test_test_case_can_be_edited(client, app, version):
     with app.app_context():
         test_case = ChecklistTestCase(
             version_id=version,
-            project_id=db.session.get(Version, version).project_id,
             title="Sample TestCase Before Edit",
             code="TC_AUDIO_EDIT",
             module="Audio",
@@ -346,7 +342,6 @@ def test_test_case_edit_failure_does_not_pollute_existing_record(client, app, ve
     with app.app_context():
         test_case = ChecklistTestCase(
             version_id=version,
-            project_id=db.session.get(Version, version).project_id,
             title="Sample TestCase Original",
             code="TC_AUDIO_ORIGINAL",
             module="Audio",
@@ -388,7 +383,6 @@ def test_test_case_can_be_deleted(client, app, version):
     with app.app_context():
         test_case = ChecklistTestCase(
             version_id=version,
-            project_id=db.session.get(Version, version).project_id,
             title="Sample TestCase Delete",
             code="TC_AUDIO_DELETE",
             module="Audio",

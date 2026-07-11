@@ -42,7 +42,6 @@ class Project(db.Model):
     )
 
     versions = db.relationship("Version", back_populates="project", lazy=True)
-    testcases = db.relationship("TestCase", back_populates="project", lazy=True)
     defects = db.relationship("Defect", back_populates="project", lazy=True)
     log_files = db.relationship("LogFile", back_populates="project", lazy=True)
 
@@ -61,7 +60,7 @@ class Version(db.Model):
     code = db.Column(db.String(80), nullable=False)
     description = db.Column(db.Text)
     release_type = db.Column(db.String(40), default="sample", nullable=False)
-    status = db.Column(db.String(30), default="planning", nullable=False)
+    status = db.Column(db.String(30), default="planned", nullable=False)
     planned_test_date = db.Column(db.Date)
     created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = db.Column(
@@ -73,7 +72,6 @@ class Version(db.Model):
 
     project = db.relationship("Project", back_populates="versions")
     testcases = db.relationship("TestCase", back_populates="version", lazy=True)
-    executions = db.relationship("TestExecution", back_populates="version", lazy=True)
     defects = db.relationship("Defect", back_populates="version", lazy=True)
     log_files = db.relationship("LogFile", back_populates="version", lazy=True)
 
@@ -87,7 +85,6 @@ class TestCase(db.Model):
     )
 
     id = db.Column(db.Integer, primary_key=True)
-    project_id = db.Column(db.Integer, db.ForeignKey("project.id"), nullable=False)
     version_id = db.Column(db.Integer, db.ForeignKey("version.id"), nullable=False)
     title = db.Column(db.String(200), nullable=False)
     code = db.Column(db.String(80), nullable=False)
@@ -95,10 +92,9 @@ class TestCase(db.Model):
     priority = db.Column(db.String(20), default="P2", nullable=False)
     case_type = db.Column(db.String(40), default="checklist", nullable=False)
     precondition = db.Column(db.Text)
-    steps = db.Column(db.Text)
-    expected_result = db.Column(db.Text)
-    status = db.Column(db.String(30), default="draft", nullable=False)
-    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    steps = db.Column(db.Text, nullable=False)
+    expected_result = db.Column(db.Text, nullable=False)
+    status = db.Column(db.String(30), default="draft", nullable=False, index=True)
     created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = db.Column(
         db.DateTime(timezone=True),
@@ -107,7 +103,6 @@ class TestCase(db.Model):
         nullable=False,
     )
 
-    project = db.relationship("Project", back_populates="testcases")
     version = db.relationship("Version", back_populates="testcases")
     executions = db.relationship("TestExecution", back_populates="testcase", lazy=True)
 
@@ -117,14 +112,28 @@ class TestCase(db.Model):
 
 class TestExecution(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    test_case_id = db.Column(db.Integer, db.ForeignKey("test_case.id"), nullable=False)
-    version_id = db.Column(db.Integer, db.ForeignKey("version.id"), nullable=False)
-    result = db.Column(db.String(30), default="passed", nullable=False)
+    test_case_id = db.Column(
+        db.Integer,
+        db.ForeignKey("test_case.id"),
+        nullable=False,
+        index=True,
+    )
+    result = db.Column(db.String(30), default="passed", nullable=False, index=True)
     actual_result = db.Column(db.Text)
     tester = db.Column(db.String(80), nullable=False)
     environment = db.Column(db.String(120))
-    executed_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
+    executed_at = db.Column(
+        db.DateTime(timezone=True),
+        default=utc_now,
+        nullable=False,
+        index=True,
+    )
     notes = db.Column(db.Text)
+    test_case_code_snapshot = db.Column(db.String(80), nullable=False)
+    test_case_title_snapshot = db.Column(db.String(200), nullable=False)
+    precondition_snapshot = db.Column(db.Text)
+    steps_snapshot = db.Column(db.Text, nullable=False)
+    expected_result_snapshot = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = db.Column(
         db.DateTime(timezone=True),
@@ -134,7 +143,14 @@ class TestExecution(db.Model):
     )
 
     testcase = db.relationship("TestCase", back_populates="executions")
-    version = db.relationship("Version", back_populates="executions")
+
+    def capture_test_case_snapshot(self, test_case):
+        self.testcase = test_case
+        self.test_case_code_snapshot = test_case.code
+        self.test_case_title_snapshot = test_case.title
+        self.precondition_snapshot = test_case.precondition
+        self.steps_snapshot = test_case.steps
+        self.expected_result_snapshot = test_case.expected_result
 
     def __repr__(self):
         return f"<TestExecution {self.result}>"

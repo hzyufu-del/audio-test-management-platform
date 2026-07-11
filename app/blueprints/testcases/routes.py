@@ -168,7 +168,6 @@ def validate_test_case_form(form_data, test_case):
 def save_test_case(test_case, form_data, errors):
     version = get_form_version(form_data["version_id"])
     test_case.version_id = version.id
-    test_case.project_id = version.project_id
     test_case.title = form_data["title"]
     test_case.code = form_data["code"]
     test_case.module = form_data["module"]
@@ -178,7 +177,6 @@ def save_test_case(test_case, form_data, errors):
     test_case.expected_result = form_data["expected_result"]
     test_case.status = form_data["status"]
     test_case.case_type = "checklist"
-    test_case.is_active = form_data["status"] != "archived"
     db.session.add(test_case)
 
     try:

@@ -117,7 +117,6 @@ def seed_demo_data():
     ).first()
     if testcase is None:
         testcase = TestCase(
-            project_id=project.id,
             version_id=version.id,
             title="Sample Audio Playback Checklist",
             code="TC_AUDIO_001",
@@ -138,7 +137,6 @@ def seed_demo_data():
     ).first()
     if bluetooth_testcase is None:
         bluetooth_testcase = TestCase(
-            project_id=project.id,
             version_id=version.id,
             title="Sample Bluetooth Reconnect Checklist",
             code="TC_BT_001",
@@ -154,19 +152,17 @@ def seed_demo_data():
 
     execution = TestExecution.query.filter_by(
         test_case_id=testcase.id,
-        version_id=version.id,
         tester="Demo Tester",
     ).first()
     if execution is None:
         execution = TestExecution(
-            test_case_id=testcase.id,
-            version_id=version.id,
             tester="Demo Tester",
             environment="Android Demo Env",
             result="passed",
             actual_result="Demo actual result is recorded.",
             notes="Mock execution record for local demo use.",
         )
+        execution.capture_test_case_snapshot(testcase)
         db.session.add(execution)
 
     defect = Defect.query.filter_by(

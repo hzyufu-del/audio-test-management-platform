@@ -266,7 +266,6 @@ def test_version_delete_with_test_cases_fails_gracefully(client, app, project):
         db.session.add(version)
         db.session.flush()
         test_case = ChecklistTestCase(
-            project_id=project,
             version_id=version.id,
             title="Sample Linked TestCase",
             code="TC_AUDIO_LINKED",

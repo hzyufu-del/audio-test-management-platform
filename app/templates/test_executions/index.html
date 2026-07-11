@@ -40,10 +40,10 @@
           <tbody>
             {% for execution in executions %}
               <tr>
-                <td>{{ execution.testcase.project.name }}</td>
+                <td>{{ execution.testcase.version.project.name }}</td>
                 <td>{{ execution.testcase.version.name }}</td>
-                <td><code>{{ execution.testcase.code }}</code></td>
-                <td>{{ execution.testcase.title }}</td>
+                <td><code>{{ execution.test_case_code_snapshot }}</code></td>
+                <td>{{ execution.test_case_title_snapshot }}</td>
                 <td>
                   {% if execution.result == "failed" %}
                     <span class="badge text-bg-danger">{{ execution.result }}</span>

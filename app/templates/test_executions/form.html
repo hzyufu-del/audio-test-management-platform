@@ -27,14 +27,23 @@
     <form method="post" class="vstack gap-3">
       <div>
         <label class="form-label" for="test_case_id">所属用例</label>
-        <select class="form-select" id="test_case_id" name="test_case_id">
-          <option value="">请选择用例</option>
-          {% for test_case in test_cases %}
-            <option value="{{ test_case.id }}" {% if selected_test_case_id|string == test_case.id|string %}selected{% endif %}>
-              {{ test_case.project.name }} / {{ test_case.version.name }} / {{ test_case.code }} - {{ test_case.title }}
-            </option>
-          {% endfor %}
-        </select>
+        {% if execution %}
+          <input name="test_case_id" type="hidden" value="{{ execution.test_case_id }}">
+          <div class="form-control bg-body-tertiary" id="test_case_id">
+            {{ execution.testcase.version.project.name }} / {{ execution.testcase.version.name }} /
+            {{ execution.test_case_code_snapshot }} - {{ execution.test_case_title_snapshot }}
+          </div>
+          <div class="form-text">执行记录创建后不能更换所属用例，以保留原始历史快照。</div>
+        {% else %}
+          <select class="form-select" id="test_case_id" name="test_case_id">
+            <option value="">请选择用例</option>
+            {% for test_case in test_cases %}
+              <option value="{{ test_case.id }}" {% if selected_test_case_id|string == test_case.id|string %}selected{% endif %}>
+                {{ test_case.version.project.name }} / {{ test_case.version.name }} / {{ test_case.code }} - {{ test_case.title }}
+              </option>
+            {% endfor %}
+          </select>
+        {% endif %}
       </div>
 
       <div class="row g-3">

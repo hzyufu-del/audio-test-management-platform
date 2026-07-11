@@ -13,7 +13,10 @@
 - Project 项目管理：支持列表、新增、详情、编辑、删除、基础表单校验和重复编码校验。
 - Version 版本管理：支持列表、新增、详情、编辑、删除，并关联所属 Project；同一 Project 下版本编码唯一。
 - TestCase 测试用例管理：支持列表、新增、详情、编辑、删除，并关联所属 Version；同一 Version 下用例编号唯一。
-- TestExecution 执行记录管理：支持列表、新增、详情、编辑、删除，并关联所属 TestCase；failed 结果要求填写实际结果。
+- TestExecution 执行记录管理：支持列表、新增、详情、编辑、删除，并关联所属 TestCase；failed 结果要求填写实际结果，创建时自动保存用例内容快照。
+- 数据一致性：TestCase 仅通过 Version 获取 Project，TestExecution 仅通过 TestCase 获取 Version 和 Project，避免重复父级字段产生矛盾。
+- 历史可追溯：执行记录保存用例编号、标题、前置条件、步骤和预期结果快照；后续修改用例不会覆盖已有执行历史。
+- SQLite 外键约束：开发环境和 pytest 环境均启用 `PRAGMA foreign_keys=ON`，数据库会拒绝孤儿关联记录。
 - 删除保护：已有 Version 的 Project 不允许直接删除；已有 TestCase 的 Version 不允许直接删除；已有 TestExecution 的 TestCase 不允许直接删除，避免误删重要测试记录。
 - 缺陷管理页面框架：列表页和占位按钮。
 - 模拟 Log 管理页面框架：列表页和占位按钮。

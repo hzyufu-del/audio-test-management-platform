@@ -30,7 +30,7 @@ def create():
     if request.method == "POST":
         form_data = get_execution_form_data()
         execution = TestExecution()
-        errors = validate_execution_form(form_data)
+        errors = validate_execution_form(form_data, execution)
 
         if not errors and save_execution(execution, form_data, errors):
             flash("执行记录已创建。", "success")
@@ -58,7 +58,7 @@ def edit(execution_id):
 
     if request.method == "POST":
         form_data = get_execution_form_data()
-        errors = validate_execution_form(form_data)
+        errors = validate_execution_form(form_data, execution)
 
         if not errors and save_execution(execution, form_data, errors):
             flash("执行记录已更新。", "success")
@@ -115,7 +115,7 @@ def get_execution_form_data():
     }
 
 
-def validate_execution_form(form_data):
+def validate_execution_form(form_data, execution):
     errors = []
     test_case = get_form_test_case(form_data["test_case_id"])
 
@@ -123,6 +123,8 @@ def validate_execution_form(form_data):
         errors.append("所属用例不能为空。")
     elif test_case is None:
         errors.append("所属用例不存在，请选择一个有效的 mock/demo/sample 用例。")
+    elif execution.id is not None and test_case.id != execution.test_case_id:
+        errors.append("执行记录创建后不能更换所属用例，以免历史快照失真。")
 
     if not form_data["result"]:
         errors.append("执行结果不能为空。")
@@ -143,8 +145,8 @@ def validate_execution_form(form_data):
 
 def save_execution(execution, form_data, errors):
     test_case = get_form_test_case(form_data["test_case_id"])
-    execution.test_case_id = test_case.id
-    execution.version_id = test_case.version_id
+    if execution.id is None:
+        execution.capture_test_case_snapshot(test_case)
     execution.result = form_data["result"]
     execution.actual_result = form_data["actual_result"]
     execution.tester = form_data["tester"]

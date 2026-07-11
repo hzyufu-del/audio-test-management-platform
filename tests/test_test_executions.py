@@ -64,7 +64,6 @@ def version(app, project):
 def test_case(app, project, version):
     with app.app_context():
         test_case = ChecklistTestCase(
-            project_id=project,
             version_id=version,
             title="Sample Execution TestCase",
             code="TC_AUDIO_EXECUTION",
@@ -97,14 +96,13 @@ def create_execution(app, test_case_id, **overrides):
     with app.app_context():
         test_case = db.session.get(ChecklistTestCase, test_case_id)
         execution = ExecutionRecord(
-            test_case_id=test_case.id,
-            version_id=test_case.version_id,
             result=overrides.get("result", "passed"),
             actual_result=overrides.get("actual_result", "Demo actual result is recorded."),
             tester=overrides.get("tester", "Demo Tester"),
             environment=overrides.get("environment", "Android Demo Env"),
             notes=overrides.get("notes", "Sample execution notes."),
         )
+        execution.capture_test_case_snapshot(test_case)
         db.session.add(execution)
         db.session.commit()
         return execution.id
@@ -323,3 +321,129 @@ def test_test_case_delete_with_executions_fails_gracefully(client, app, test_cas
     with app.app_context():
         assert db.session.get(ChecklistTestCase, test_case) is not None
         assert db.session.get(ExecutionRecord, execution_id) is not None
+
+
+def test_execution_creation_captures_test_case_snapshot(client, app, test_case):
+    response = client.post(
+        "/test-executions/new",
+        data=valid_execution_data(test_case),
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+
+    with app.app_context():
+        execution = ExecutionRecord.query.filter_by(test_case_id=test_case).one()
+        assert execution.test_case_code_snapshot == "TC_AUDIO_EXECUTION"
+        assert execution.test_case_title_snapshot == "Sample Execution TestCase"
+        assert execution.precondition_snapshot is None
+        assert execution.steps_snapshot == "Run sample execution steps."
+        assert execution.expected_result_snapshot == "Sample execution expected result."
+
+
+def test_test_case_changes_do_not_change_existing_execution_snapshot(
+    client, app, test_case
+):
+    client.post(
+        "/test-executions/new",
+        data=valid_execution_data(test_case),
+        follow_redirects=True,
+    )
+
+    with app.app_context():
+        execution = ExecutionRecord.query.filter_by(test_case_id=test_case).one()
+        execution_id = execution.id
+        original_snapshot = (
+            execution.test_case_code_snapshot,
+            execution.test_case_title_snapshot,
+            execution.steps_snapshot,
+            execution.expected_result_snapshot,
+        )
+
+        test_case_record = db.session.get(ChecklistTestCase, test_case)
+        test_case_record.code = "TC_AUDIO_EXECUTION_UPDATED"
+        test_case_record.title = "Sample Updated Execution TestCase"
+        test_case_record.steps = "Run updated sample execution steps."
+        test_case_record.expected_result = "Updated sample result is recorded."
+        db.session.commit()
+
+        unchanged_execution = db.session.get(ExecutionRecord, execution_id)
+        assert (
+            unchanged_execution.test_case_code_snapshot,
+            unchanged_execution.test_case_title_snapshot,
+            unchanged_execution.steps_snapshot,
+            unchanged_execution.expected_result_snapshot,
+        ) == original_snapshot
+
+
+def test_execution_edit_does_not_overwrite_original_snapshot(client, app, test_case):
+    client.post(
+        "/test-executions/new",
+        data=valid_execution_data(test_case),
+        follow_redirects=True,
+    )
+
+    with app.app_context():
+        execution = ExecutionRecord.query.filter_by(test_case_id=test_case).one()
+        execution_id = execution.id
+        original_snapshot = (
+            execution.test_case_code_snapshot,
+            execution.test_case_title_snapshot,
+            execution.precondition_snapshot,
+            execution.steps_snapshot,
+            execution.expected_result_snapshot,
+        )
+
+        test_case_record = db.session.get(ChecklistTestCase, test_case)
+        test_case_record.title = "Sample TestCase Changed Before Execution Edit"
+        test_case_record.steps = "Run changed steps before execution edit."
+        db.session.commit()
+
+    response = client.post(
+        f"/test-executions/{execution_id}/edit",
+        data=valid_execution_data(
+            test_case,
+            result="blocked",
+            actual_result="Demo blocked result after edit.",
+        ),
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+
+    with app.app_context():
+        execution = db.session.get(ExecutionRecord, execution_id)
+        assert execution.result == "blocked"
+        assert (
+            execution.test_case_code_snapshot,
+            execution.test_case_title_snapshot,
+            execution.precondition_snapshot,
+            execution.steps_snapshot,
+            execution.expected_result_snapshot,
+        ) == original_snapshot
+
+
+def test_execution_detail_displays_historical_test_case_snapshot(
+    client, app, test_case
+):
+    client.post(
+        "/test-executions/new",
+        data=valid_execution_data(test_case),
+        follow_redirects=True,
+    )
+
+    with app.app_context():
+        execution = ExecutionRecord.query.filter_by(test_case_id=test_case).one()
+        execution_id = execution.id
+        test_case_record = db.session.get(ChecklistTestCase, test_case)
+        test_case_record.title = "Sample Live TestCase Title Changed"
+        test_case_record.steps = "Run changed live steps."
+        db.session.commit()
+
+    response = client.get(f"/test-executions/{execution_id}")
+    page = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "Sample Execution TestCase" in page
+    assert "Run sample execution steps." in page
+    assert "Sample Live TestCase Title Changed" not in page

@@ -7,7 +7,7 @@
     <div>
       <p class="eyebrow">test execution detail</p>
       <h1>执行记录详情</h1>
-      <p class="text-muted mb-0">{{ execution.testcase.code }} - {{ execution.testcase.title }}</p>
+      <p class="text-muted mb-0">{{ execution.test_case_code_snapshot }} - {{ execution.test_case_title_snapshot }}</p>
     </div>
     <div class="d-flex flex-wrap gap-2">
       <a class="btn btn-primary" href="{{ url_for('executions.edit', execution_id=execution.id) }}">编辑执行记录</a>
@@ -23,7 +23,7 @@
     <div class="detail-grid">
       <div>
         <span>Project</span>
-        <strong>{{ execution.testcase.project.name }}</strong>
+        <strong>{{ execution.testcase.version.project.name }}</strong>
       </div>
       <div>
         <span>Version</span>
@@ -31,7 +31,7 @@
       </div>
       <div>
         <span>TestCase</span>
-        <strong>{{ execution.testcase.code }}</strong>
+        <strong>{{ execution.test_case_code_snapshot }}</strong>
       </div>
       <div>
         <span>执行结果</span>
@@ -62,6 +62,30 @@
       <div>
         <span>更新时间</span>
         <strong>{{ execution.updated_at.strftime("%Y-%m-%d %H:%M") if execution.updated_at else "-" }}</strong>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel mt-3">
+    <div class="panel-header">
+      <h2>执行时用例快照</h2>
+    </div>
+    <div class="vstack gap-3">
+      <div>
+        <strong class="d-block mb-1">用例标题</strong>
+        <p class="mb-0">{{ execution.test_case_title_snapshot }}</p>
+      </div>
+      <div>
+        <strong class="d-block mb-1">前置条件</strong>
+        <p class="mb-0">{{ execution.precondition_snapshot or "暂无前置条件。" }}</p>
+      </div>
+      <div>
+        <strong class="d-block mb-1">测试步骤</strong>
+        <p class="mb-0">{{ execution.steps_snapshot }}</p>
+      </div>
+      <div>
+        <strong class="d-block mb-1">预期结果</strong>
+        <p class="mb-0">{{ execution.expected_result_snapshot }}</p>
       </div>
     </div>
   </section>

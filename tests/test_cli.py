@@ -8,6 +8,7 @@ from app.models import (
     TestCase as ChecklistTestCase,
     TestExecution as ExecutionRecord,
     User,
+    Version,
 )
 
 
@@ -48,8 +49,30 @@ def test_init_db_seeds_demo_data_when_schema_exists(tmp_path):
         assert User.query.filter_by(email="demo@example.com").count() == 1
         assert Project.query.filter_by(code="MOCK-AUDIO-01").count() == 1
         assert ChecklistTestCase.query.filter_by(code="TC_AUDIO_001").count() == 1
-        assert ExecutionRecord.query.filter_by(result="passed", tester="Demo Tester").count() == 1
+        assert Project.query.count() >= 2
+        assert Version.query.count() >= 3
+        assert {
+            row.result for row in ExecutionRecord.query.all()
+        } == {"passed", "failed", "blocked", "skipped"}
         defect = Defect.query.filter_by(code="DEF_DEMO_001").one()
         assert defect.environment_snapshot == "Android Demo Env"
-        assert defect.actual_result_snapshot == "Demo actual result is recorded."
+        assert defect.actual_result_snapshot == "Demo failed audio output is recorded."
         assert defect.executed_at_snapshot == defect.execution.executed_at
+        assert all(item.execution.result == "failed" for item in Defect.query.all())
+        assert {item.status for item in Defect.query.all()} == {
+            "open",
+            "fixed",
+            "closed",
+            "rejected",
+        }
+        assert {item.severity for item in Defect.query.all()} == {
+            "blocker",
+            "critical",
+            "major",
+            "minor",
+        }
+        assert any(len(item.defects) > 1 for item in ExecutionRecord.query.all())
+        assert any(
+            item.result == "failed" and not item.defects
+            for item in ExecutionRecord.query.all()
+        )

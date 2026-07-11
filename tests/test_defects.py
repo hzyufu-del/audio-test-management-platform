@@ -173,6 +173,34 @@ def test_defect_can_be_created_from_execution(client, app, execution):
         assert defect.status == "open"
 
 
+@pytest.mark.parametrize("result", ["passed", "blocked", "skipped"])
+def test_defect_create_rejects_non_failed_execution(
+    client, app, test_case, result
+):
+    with app.app_context():
+        test_case_record = db.session.get(ChecklistTestCase, test_case)
+        execution = ExecutionRecord(
+            result=result,
+            actual_result="Sample non-failed execution result.",
+            tester="Demo Tester",
+            environment="Demo Env",
+        )
+        execution.capture_test_case_snapshot(test_case_record)
+        db.session.add(execution)
+        db.session.commit()
+        execution_id = execution.id
+
+    response = client.post(
+        "/defects/new",
+        data=valid_defect_data(execution_id),
+    )
+
+    assert response.status_code == 200
+    assert "只有 failed 执行记录可以创建缺陷" in response.get_data(as_text=True)
+    with app.app_context():
+        assert Defect.query.count() == 0
+
+
 def test_defect_create_fails_when_execution_is_empty(client, app):
     response = client.post(
         "/defects/new",

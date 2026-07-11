@@ -190,6 +190,9 @@ def test_migration_backfills_existing_mock_execution_snapshots(tmp_path):
         assert defect["environment_snapshot"] == "Migration Demo Env"
         assert defect["actual_result_snapshot"] == "Demo migration actual result."
         assert defect["executed_at_snapshot"] is not None
+        assert db.session.execute(
+            text("SELECT result FROM test_execution WHERE id = 401")
+        ).scalar_one() == "failed"
         assert db.session.execute(text("SELECT COUNT(*) FROM test_case")).scalar_one() == 1
         assert db.session.execute(text("SELECT COUNT(*) FROM test_execution")).scalar_one() == 1
         assert db.session.execute(text("SELECT COUNT(*) FROM defect")).scalar_one() == 1

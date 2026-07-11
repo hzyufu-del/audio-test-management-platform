@@ -88,6 +88,7 @@ def render_template_defect_form(page_title, defect, form_data, errors):
     executions = (
         TestExecution.query.join(TestExecution.testcase)
         .join(TestCase.version)
+        .filter(TestExecution.result == "failed")
         .order_by(TestExecution.executed_at.desc())
         .all()
     )
@@ -136,6 +137,8 @@ def validate_defect_form(form_data, defect):
             errors.append("来源执行记录不能为空。")
         elif execution is None:
             errors.append("来源执行记录不存在，请选择有效的 mock/demo/sample 执行记录。")
+        elif execution.result != "failed":
+            errors.append("只有 failed 执行记录可以创建缺陷。")
 
         if not form_data["code"]:
             errors.append("缺陷编号不能为空。")

@@ -1,71 +1,332 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard - 消费电子音频产品测试管理与自动化辅助平台{% endblock %}
+{% block title %}Dashboard - 测试质量决策页{% endblock %}
+
+{% macro rate(value) -%}
+  {%- if value is none -%}—{%- else -%}{{ value }}%{%- endif -%}
+{%- endmacro %}
 
 {% block content %}
-  <section class="page-heading">
+  <section class="page-heading dashboard-heading">
     <div>
-      <p class="eyebrow">mock / demo / sample only</p>
-      <h1>Dashboard</h1>
-      <p class="text-muted mb-0">消费电子音频产品测试管理与自动化辅助平台</p>
+      <p class="eyebrow">Quality overview</p>
+      <h1>测试质量决策页</h1>
+      <p class="text-muted mb-0">聚合当前筛选范围内的执行结果与缺陷风险，数据均为 mock / demo / sample。</p>
     </div>
-    <div class="d-flex gap-2">
-      <a class="btn btn-primary" href="{{ url_for('projects.index') }}">查看项目</a>
-      <button class="btn btn-outline-secondary" type="button" disabled>导出占位</button>
+    <a class="btn btn-outline-secondary" href="{{ url_for('dashboard.index') }}">重置筛选</a>
+  </section>
+
+  <form class="dashboard-filter mb-3" method="get" aria-label="Dashboard 筛选">
+    <div>
+      <label class="form-label" for="project_id">项目</label>
+      <select class="form-select" id="project_id" name="project_id">
+        <option value="">全部项目</option>
+        {% for project in projects %}
+          <option value="{{ project.id }}" {% if selected_project_id == project.id %}selected{% endif %}>
+            {{ project.name }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="form-label" for="version_id">版本</label>
+      <select class="form-select" id="version_id" name="version_id">
+        <option value="">全部版本</option>
+        {% for version in versions %}
+          <option value="{{ version.id }}" {% if selected_version_id == version.id %}selected{% endif %}>
+            {{ version.name }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="form-label" for="range">执行时间</label>
+      <select class="form-select" id="range" name="range">
+        <option value="7d" {% if dashboard.scope.range_key == '7d' %}selected{% endif %}>最近 7 天</option>
+        <option value="30d" {% if dashboard.scope.range_key == '30d' %}selected{% endif %}>最近 30 天</option>
+        <option value="all" {% if dashboard.scope.range_key == 'all' %}selected{% endif %}>全部时间</option>
+      </select>
+    </div>
+    <button class="btn btn-primary align-self-end" type="submit">应用筛选</button>
+  </form>
+
+  <div class="scope-bar" data-range="{{ dashboard.scope.range_key }}">
+    <span>{{ dashboard.scope.range_label }}</span>
+    <span>项目 <strong data-scope="project-count">{{ dashboard.scope_counts.projects }}</strong></span>
+    <span>版本 <strong data-scope="version-count">{{ dashboard.scope_counts.versions }}</strong></span>
+    <span>有效用例 <strong data-scope="testcase-count">{{ dashboard.scope_counts.test_cases }}</strong></span>
+    <span>本周期新增缺陷 <strong data-scope="period-defect-count">{{ dashboard.defects.period_new_count }}</strong></span>
+  </div>
+
+  <section class="dashboard-kpis" aria-label="核心质量指标">
+    <div class="stat-card stat-card-primary">
+      <span>执行总数</span>
+      <strong data-kpi="execution-total">{{ dashboard.execution.total }}</strong>
+      <small>{{ dashboard.scope.range_label }}</small>
+    </div>
+    <div class="stat-card">
+      <span>通过率</span>
+      <strong data-kpi="pass-rate">{{ rate(dashboard.execution.pass_rate) }}</strong>
+      <small>passed / (passed + failed)</small>
+    </div>
+    <div class="stat-card">
+      <span>失败率</span>
+      <strong data-kpi="fail-rate">{{ rate(dashboard.execution.fail_rate) }}</strong>
+      <small>failed / (passed + failed)</small>
+    </div>
+    <div class="stat-card">
+      <span>阻塞执行</span>
+      <strong data-kpi="blocked-total">{{ dashboard.execution.by_result.blocked }}</strong>
+      <small>需要排查环境或依赖</small>
+    </div>
+    <div class="stat-card stat-card-warning">
+      <span>当前未结缺陷</span>
+      <strong data-kpi="open-defects">{{ dashboard.defects.open_count }}</strong>
+      <small>open + fixed</small>
+    </div>
+    <div class="stat-card stat-card-danger">
+      <span>高风险缺陷</span>
+      <strong data-kpi="critical-risks">{{ dashboard.defects.critical_risk_count }}</strong>
+      <small>blocker / critical 且未结</small>
     </div>
   </section>
 
-  <section class="row g-3 mb-4">
-    {% for item in stats %}
-      <div class="col-12 col-sm-6 col-xl-3">
-        <div class="stat-card">
-          <span>{{ item.label }}</span>
-          <strong>{{ item.value }}</strong>
-          <small>{{ item.hint }}</small>
-        </div>
+  <section class="dashboard-chart-grid mt-3">
+    <div class="panel chart-panel">
+      <div class="panel-header">
+        <h2>执行结果分布</h2>
+        <span class="text-muted small">缺陷关联率 {{ rate(dashboard.execution.failed_with_defect_rate) }}</span>
       </div>
-    {% endfor %}
+      <div class="chart-frame"><canvas id="resultChart" aria-label="执行结果分布图"></canvas></div>
+      <div class="result-counts" aria-label="执行结果数量">
+        <span>Passed <strong>{{ dashboard.execution.by_result.passed }}</strong></span>
+        <span>Failed <strong>{{ dashboard.execution.by_result.failed }}</strong></span>
+        <span>Blocked <strong>{{ dashboard.execution.by_result.blocked }}</strong></span>
+        <span>Skipped <strong>{{ dashboard.execution.by_result.skipped }}</strong></span>
+      </div>
+    </div>
+    <div class="panel chart-panel chart-panel-wide">
+      <div class="panel-header">
+        <h2>失败趋势</h2>
+        <span class="text-muted small">按执行日期统计</span>
+      </div>
+      <div class="chart-frame"><canvas id="trendChart" aria-label="失败趋势图"></canvas></div>
+    </div>
+    <div class="panel chart-panel">
+      <div class="panel-header"><h2>缺陷状态</h2></div>
+      <div class="chart-frame"><canvas id="defectStatusChart" aria-label="缺陷状态分布图"></canvas></div>
+    </div>
+    <div class="panel chart-panel">
+      <div class="panel-header"><h2>缺陷严重度</h2></div>
+      <div class="chart-frame"><canvas id="severityChart" aria-label="缺陷严重度分布图"></canvas></div>
+    </div>
+    <div class="panel chart-panel">
+      <div class="panel-header"><h2>各版本缺陷数量</h2></div>
+      {% if dashboard.defects.by_version %}
+        <div class="version-defect-list">
+          {% for item in dashboard.defects.by_version %}
+            <div>
+              <span>{{ item.label }}</span>
+              <strong>{{ item.count }}</strong>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty-state py-4">
+          <p class="text-muted mb-0">当前范围暂无缺陷。</p>
+        </div>
+      {% endif %}
+    </div>
   </section>
 
-  <section class="row g-3">
-    <div class="col-12 col-xl-8">
-      <div class="panel">
-        <div class="panel-header">
-          <h2>近期动态</h2>
-          <button class="btn btn-sm btn-outline-secondary" type="button" disabled>刷新占位</button>
-        </div>
-        <div class="table-responsive">
-          <table class="table align-middle mb-0">
-            <thead>
+  <section class="panel mt-3">
+    <div class="panel-header">
+      <h2>版本质量概览</h2>
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('versions.index') }}">版本列表</a>
+    </div>
+    {% if dashboard.version_quality %}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th>项目 / 版本</th>
+              <th>执行</th>
+              <th>通过</th>
+              <th>失败</th>
+              <th>阻塞</th>
+              <th>通过率</th>
+              <th>未结缺陷</th>
+              <th>高风险</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in dashboard.version_quality %}
               <tr>
-                <th>模块</th>
-                <th>动态</th>
+                <td>
+                  <a class="fw-semibold text-decoration-none" href="{{ url_for('versions.detail', version_id=row.version_id) }}">{{ row.version_name }}</a>
+                  <div class="text-muted small">{{ row.project_name }} · {{ row.version_code }}</div>
+                </td>
+                <td>{{ row.executions }}</td>
+                <td class="text-success">{{ row.passed }}</td>
+                <td class="text-danger">{{ row.failed }}</td>
+                <td class="text-warning-emphasis">{{ row.blocked }}</td>
+                <td>{{ rate(row.pass_rate) }}</td>
+                <td>{{ row.open_defects }}</td>
+                <td>
+                  {% if row.critical_risks %}
+                    <span class="badge text-bg-danger">{{ row.critical_risks }}</span>
+                  {% else %}
+                    <span class="text-muted">0</span>
+                  {% endif %}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {% for item in recent_items %}
-                <tr>
-                  <td><span class="badge text-bg-light">{{ item.module }}</span></td>
-                  <td>{{ item.text }}</td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
+            {% endfor %}
+          </tbody>
+        </table>
       </div>
+    {% else %}
+      <div class="empty-state py-4">
+        <h2>当前范围暂无版本</h2>
+        <p class="text-muted mb-0">创建 mock / demo 版本后，这里会显示质量对比。</p>
+      </div>
+    {% endif %}
+  </section>
+
+  <section class="dashboard-attention-grid mt-3">
+    <div class="panel">
+      <div class="panel-header">
+        <h2>最近失败与阻塞</h2>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('executions.index') }}">全部执行</a>
+      </div>
+      {% if dashboard.attention.executions %}
+        <div class="list-group list-group-flush compact-list">
+          {% for item in dashboard.attention.executions %}
+            <a class="list-group-item list-group-item-action" href="{{ url_for('executions.detail', execution_id=item.id) }}">
+              <div class="d-flex justify-content-between gap-3">
+                <strong>{{ item.test_case_code }} · {{ item.test_case_title }}</strong>
+                <span class="badge {% if item.result == 'failed' %}text-bg-danger{% else %}text-bg-warning{% endif %}">{{ item.result }}</span>
+              </div>
+              <div class="text-muted small mt-1">{{ item.project_name }} / {{ item.version_name }} · {{ item.executed_at.strftime('%Y-%m-%d %H:%M') }}</div>
+            </a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="text-muted mb-0">当前范围没有失败或阻塞执行。</p>
+      {% endif %}
     </div>
-    <div class="col-12 col-xl-4">
-      <div class="panel">
-        <div class="panel-header">
-          <h2>模块入口</h2>
-        </div>
-        <div class="list-group list-group-flush">
-          <a class="list-group-item list-group-item-action" href="{{ url_for('testcases.index') }}">Checklist 用例管理</a>
-          <a class="list-group-item list-group-item-action" href="{{ url_for('executions.index') }}">执行记录</a>
-          <a class="list-group-item list-group-item-action" href="{{ url_for('defects.index') }}">缺陷管理</a>
-          <a class="list-group-item list-group-item-action" href="{{ url_for('logs.index') }}">模拟 Log 管理</a>
-        </div>
+    <div class="panel">
+      <div class="panel-header">
+        <h2>当前高风险缺陷</h2>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('defects.index') }}">全部缺陷</a>
       </div>
+      {% if dashboard.attention.defects %}
+        <div class="list-group list-group-flush compact-list">
+          {% for item in dashboard.attention.defects %}
+            <a class="list-group-item list-group-item-action" href="{{ url_for('defects.detail', defect_id=item.id) }}">
+              <div class="d-flex justify-content-between gap-3">
+                <strong>{{ item.code }} · {{ item.title }}</strong>
+                <span class="badge text-bg-danger">{{ item.severity }}</span>
+              </div>
+              <div class="text-muted small mt-1">{{ item.project_name }} / {{ item.version_name }} · {{ item.status }}</div>
+            </a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="text-muted mb-0">当前没有 blocker / critical 未结缺陷。</p>
+      {% endif %}
     </div>
   </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script>
+    const dashboardCharts = {
+      results: {{ dashboard.execution.by_result | tojson }},
+      trend: {{ dashboard.trend | tojson }},
+      defectStatus: {{ dashboard.defects.by_status | tojson }},
+      severity: {{ dashboard.defects.by_severity | tojson }}
+    };
+    const chartColors = {
+      green: "#14835b",
+      red: "#c2413b",
+      amber: "#c98200",
+      gray: "#8992a3",
+      blue: "#2458d3"
+    };
+    const commonOptions = {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { position: "bottom" } }
+    };
+
+    new Chart(document.getElementById("resultChart"), {
+      type: "doughnut",
+      data: {
+        labels: ["Passed", "Failed", "Blocked", "Skipped"],
+        datasets: [{
+          data: [dashboardCharts.results.passed, dashboardCharts.results.failed, dashboardCharts.results.blocked, dashboardCharts.results.skipped],
+          backgroundColor: [chartColors.green, chartColors.red, chartColors.amber, chartColors.gray]
+        }]
+      },
+      options: commonOptions
+    });
+
+    new Chart(document.getElementById("trendChart"), {
+      type: "line",
+      data: {
+        labels: dashboardCharts.trend.labels,
+        datasets: [{
+          label: "Failed",
+          data: dashboardCharts.trend.failed,
+          borderColor: chartColors.red,
+          backgroundColor: "rgba(194, 65, 59, 0.12)",
+          fill: true,
+          tension: 0.2,
+          yAxisID: "y"
+        }, {
+          label: "Fail rate (%)",
+          data: dashboardCharts.trend.fail_rate,
+          borderColor: chartColors.blue,
+          backgroundColor: chartColors.blue,
+          borderDash: [5, 4],
+          tension: 0.2,
+          yAxisID: "yRate"
+        }]
+      },
+      options: {
+        ...commonOptions,
+        scales: {
+          y: { beginAtZero: true, position: "left", ticks: { precision: 0 } },
+          yRate: { beginAtZero: true, max: 100, position: "right", grid: { drawOnChartArea: false } }
+        }
+      }
+    });
+
+    new Chart(document.getElementById("defectStatusChart"), {
+      type: "bar",
+      data: {
+        labels: ["Open", "Fixed", "Closed", "Rejected"],
+        datasets: [{
+          label: "Defects",
+          data: [dashboardCharts.defectStatus.open, dashboardCharts.defectStatus.fixed, dashboardCharts.defectStatus.closed, dashboardCharts.defectStatus.rejected],
+          backgroundColor: [chartColors.red, chartColors.amber, chartColors.green, chartColors.gray]
+        }]
+      },
+      options: { ...commonOptions, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+    });
+
+    new Chart(document.getElementById("severityChart"), {
+      type: "bar",
+      data: {
+        labels: ["Blocker", "Critical", "Major", "Minor"],
+        datasets: [{
+          label: "Defects",
+          data: [dashboardCharts.severity.blocker, dashboardCharts.severity.critical, dashboardCharts.severity.major, dashboardCharts.severity.minor],
+          backgroundColor: ["#7f1d1d", chartColors.red, chartColors.amber, chartColors.blue]
+        }]
+      },
+      options: { ...commonOptions, indexAxis: "y", scales: { x: { beginAtZero: true, ticks: { precision: 0 } } } }
+    });
+  </script>
 {% endblock %}

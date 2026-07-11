@@ -8,19 +8,19 @@
 
 ## 当前已完成功能
 
-- Dashboard 首页：展示项目数、用例数、已执行数、缺陷数等模拟统计卡片。
+- Dashboard V1 测试质量决策页：基于数据库聚合 Project、Version、有效 TestCase、执行结果、通过率、失败率和当前缺陷风险；支持 Project、Version、7 天 / 30 天 / 全部时间筛选，并提供趋势图、版本质量表和需关注项。
 - 登录 / 注册页面框架：提供基础账号入口，后续可扩展权限。
 - Project 项目管理：支持列表、新增、详情、编辑、删除、基础表单校验和重复编码校验。
 - Version 版本管理：支持列表、新增、详情、编辑、删除，并关联所属 Project；同一 Project 下版本编码唯一。
 - TestCase 测试用例管理：支持列表、新增、详情、编辑、删除，并关联所属 Version；同一 Version 下用例编号唯一。
 - TestExecution 执行记录管理：支持列表、新增、详情、编辑、删除，并关联所属 TestCase；failed 结果要求填写实际结果，创建时自动保存用例内容快照。
-- Defect 缺陷管理：支持列表、新增、详情、编辑和删除；缺陷只关联来源 TestExecution，并自动保存执行环境、实际结果和执行时间快照。
+- Defect 缺陷管理：支持列表、新增、详情、编辑和删除；缺陷只能来源于 failed TestExecution，并自动保存执行环境、实际结果和执行时间快照。
 - 数据一致性：TestCase 仅通过 Version 获取 Project，TestExecution 仅通过 TestCase 获取 Version 和 Project，避免重复父级字段产生矛盾。
 - 历史可追溯：执行记录保存用例编号、标题、前置条件、步骤和预期结果快照；后续修改用例不会覆盖已有执行历史。
 - SQLite 外键约束：开发环境和 pytest 环境均启用 `PRAGMA foreign_keys=ON`，数据库会拒绝孤儿关联记录。
 - 删除保护：已有 Version 的 Project 不允许直接删除；已有 TestCase 的 Version 不允许直接删除；已有 TestExecution 的 TestCase 不允许直接删除，避免误删重要测试记录。
 - 模拟 Log 管理页面框架：列表页和占位按钮。
-- pytest：覆盖首页访问、Project / Version / TestCase / TestExecution / Defect CRUD、表单校验、快照和关联删除保护。
+- pytest：覆盖 Dashboard 聚合与筛选、Project / Version / TestCase / TestExecution / Defect CRUD、表单校验、快照、外键和关联删除保护。
 
 ## 技术栈
 
@@ -30,6 +30,7 @@
 - Flask-Migrate
 - Flask-Login
 - Bootstrap 5
+- Chart.js 4.4.7
 - SQLite
 - pytest
 
@@ -41,6 +42,8 @@ audio-test-management-platform/
 │   ├── __init__.py
 │   ├── extensions.py
 │   ├── models.py
+│   ├── services/
+│   │   └── dashboard_service.py
 │   ├── blueprints/
 │   │   ├── auth/
 │   │   ├── dashboard/
@@ -67,6 +70,7 @@ audio-test-management-platform/
 - `app/__init__.py`：Flask 应用工厂，负责创建 app、初始化扩展、注册蓝图和 CLI 命令。
 - `app/extensions.py`：集中放置 `db`、`migrate`、`login_manager`，避免循环导入。
 - `app/models.py`：基础数据模型，包括 `User`、`Project`、`Version`、`TestCase`、`TestExecution`、`Defect`、`LogFile`。
+- `app/services/dashboard_service.py`：集中构建 Dashboard 查询范围、聚合执行与缺陷指标、生成趋势和版本质量数据。
 - `app/blueprints/`：按业务模块拆分路由，便于后续逐步扩展 CRUD。
 - `app/templates/`：Jinja2 页面模板，包含基础布局、Dashboard、登录注册，以及 Project / Version / TestCase / TestExecution / Defect 页面。
 - `app/static/`：静态资源，目前包含基础 CSS。
@@ -139,7 +143,6 @@ flask --app run.py init-db
 - 为 Defect 增加受控状态流转和变更历史。
 - 为 Log 增加完整 CRUD。
 - 增加搜索、筛选、分页和导入导出。
-- 将 Dashboard 统计从 mock 数据切换为数据库聚合查询。
 - 为缺陷和 Log 增加关联关系。
 - 增加角色权限，例如 tester、lead、viewer。
 - 增加更多 pytest 覆盖路由、模型和表单提交。

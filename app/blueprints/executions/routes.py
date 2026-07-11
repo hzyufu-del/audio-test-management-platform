@@ -76,8 +76,17 @@ def edit(execution_id):
 def delete(execution_id):
     execution = db.get_or_404(TestExecution, execution_id)
 
-    db.session.delete(execution)
-    db.session.commit()
+    if execution.defects:
+        flash("该执行记录下已有缺陷，不能直接删除。请先保留执行历史或清理关联缺陷。", "warning")
+        return redirect(url_for("executions.detail", execution_id=execution.id))
+
+    try:
+        db.session.delete(execution)
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        flash("该执行记录存在关联数据，不能直接删除。", "warning")
+        return redirect(url_for("executions.detail", execution_id=execution.id))
 
     flash("执行记录已删除。", "success")
     return redirect(url_for("executions.index"))

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}缺陷管理 - 消费电子音频产品测试管理与自动化辅助平台{% endblock %}
+
+{% block content %}
+  <section class="page-heading">
+    <div>
+      <p class="eyebrow">defect crud</p>
+      <h1>缺陷管理</h1>
+      <p class="text-muted mb-0">维护 mock/demo/sample 执行中发现的缺陷，并保留来源执行证据。</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-primary" href="{{ url_for('defects.create') }}">新增缺陷</a>
+      <a class="btn btn-outline-secondary" href="{{ url_for('executions.index') }}">返回执行记录</a>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-header">
+      <h2>缺陷列表</h2>
+      <span class="text-muted small">共 {{ defects|length }} 条缺陷</span>
+    </div>
+
+    {% if defects %}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th>缺陷编号</th>
+              <th>缺陷标题</th>
+              <th>严重程度</th>
+              <th>优先级</th>
+              <th>状态</th>
+              <th>Execution</th>
+              <th>TestCase</th>
+              <th>Version</th>
+              <th>Project</th>
+              <th class="text-end">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for defect in defects %}
+              <tr>
+                <td><code>{{ defect.code }}</code></td>
+                <td>{{ defect.title }}</td>
+                <td><span class="badge text-bg-light">{{ defect.severity }}</span></td>
+                <td><span class="badge text-bg-light">{{ defect.priority }}</span></td>
+                <td><span class="badge text-bg-light">{{ defect.status }}</span></td>
+                <td>#{{ defect.execution.id }}</td>
+                <td><code>{{ defect.execution.test_case_code_snapshot }}</code></td>
+                <td>{{ defect.execution.testcase.version.name }}</td>
+                <td>{{ defect.execution.testcase.version.project.name }}</td>
+                <td class="text-end">
+                  <a class="btn btn-sm btn-outline-primary" href="{{ url_for('defects.detail', defect_id=defect.id) }}">查看</a>
+                  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('defects.edit', defect_id=defect.id) }}">编辑</a>
+                  <form class="d-inline" action="{{ url_for('defects.delete', defect_id=defect.id) }}" method="post" onsubmit="return confirm('确认删除该 mock/demo/sample 缺陷？');">
+                    <button class="btn btn-sm btn-outline-danger" type="submit">删除</button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <h2>暂无缺陷</h2>
+        <p>可以从一条 mock/demo/sample 执行记录创建缺陷。</p>
+        <a class="btn btn-primary" href="{{ url_for('defects.create') }}">新增缺陷</a>
+      </div>
+    {% endif %}
+  </section>
+{% endblock %}

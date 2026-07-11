@@ -36,6 +36,9 @@ def test_migration_upgrade_creates_consistent_schema(tmp_path):
         execution_indexes = {
             index["name"] for index in inspector.get_indexes("test_execution")
         }
+        defect_columns = {
+            column["name"]: column for column in inspector.get_columns("defect")
+        }
 
         assert "project_id" not in test_case_columns
         assert "is_active" not in test_case_columns
@@ -52,6 +55,12 @@ def test_migration_upgrade_creates_consistent_schema(tmp_path):
             "ix_test_execution_result",
             "ix_test_execution_executed_at",
         } <= execution_indexes
+        assert "project_id" not in defect_columns
+        assert "version_id" not in defect_columns
+        assert "reported_by" not in defect_columns
+        assert defect_columns["test_execution_id"]["nullable"] is False
+        assert defect_columns["code"]["nullable"] is False
+        assert defect_columns["executed_at_snapshot"]["nullable"] is False
 
 
 def test_migration_backfills_existing_mock_execution_snapshots(tmp_path):
@@ -118,6 +127,19 @@ def test_migration_backfills_existing_mock_execution_snapshots(tmp_path):
                 """
             )
         )
+        db.session.execute(
+            text(
+                """
+                INSERT INTO defect
+                    (id, project_id, version_id, title, severity, status,
+                     reported_by, description, created_at)
+                VALUES
+                    (501, 101, 201, 'Sample Migrated Defect', 'medium', 'open',
+                     'demo_reporter', 'Sample migrated defect description.',
+                     CURRENT_TIMESTAMP)
+                """
+            )
+        )
         db.session.commit()
         db.session.remove()
 
@@ -139,6 +161,17 @@ def test_migration_backfills_existing_mock_execution_snapshots(tmp_path):
         version_status = db.session.execute(
             text("SELECT status FROM version WHERE id = 201")
         ).scalar_one()
+        defect = db.session.execute(
+            text(
+                """
+                SELECT test_execution_id, code, component, severity, priority,
+                       reporter, environment_snapshot, actual_result_snapshot,
+                       executed_at_snapshot
+                FROM defect
+                WHERE id = 501
+                """
+            )
+        ).mappings().one()
 
         assert row == {
             "test_case_code_snapshot": "TC_AUDIO_MIGRATION",
@@ -148,5 +181,15 @@ def test_migration_backfills_existing_mock_execution_snapshots(tmp_path):
             "expected_result_snapshot": "Sample migration result is recorded.",
         }
         assert version_status == "planned"
+        assert defect["test_execution_id"] == 401
+        assert defect["code"] == "DEF_DEMO_501"
+        assert defect["component"] == "Audio"
+        assert defect["severity"] == "major"
+        assert defect["priority"] == "P2"
+        assert defect["reporter"] == "demo_reporter"
+        assert defect["environment_snapshot"] == "Migration Demo Env"
+        assert defect["actual_result_snapshot"] == "Demo migration actual result."
+        assert defect["executed_at_snapshot"] is not None
         assert db.session.execute(text("SELECT COUNT(*) FROM test_case")).scalar_one() == 1
         assert db.session.execute(text("SELECT COUNT(*) FROM test_execution")).scalar_one() == 1
+        assert db.session.execute(text("SELECT COUNT(*) FROM defect")).scalar_one() == 1

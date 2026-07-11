@@ -42,7 +42,6 @@ class Project(db.Model):
     )
 
     versions = db.relationship("Version", back_populates="project", lazy=True)
-    defects = db.relationship("Defect", back_populates="project", lazy=True)
     log_files = db.relationship("LogFile", back_populates="project", lazy=True)
 
     def __repr__(self):
@@ -72,7 +71,6 @@ class Version(db.Model):
 
     project = db.relationship("Project", back_populates="versions")
     testcases = db.relationship("TestCase", back_populates="version", lazy=True)
-    defects = db.relationship("Defect", back_populates="version", lazy=True)
     log_files = db.relationship("LogFile", back_populates="version", lazy=True)
 
     def __repr__(self):
@@ -143,6 +141,7 @@ class TestExecution(db.Model):
     )
 
     testcase = db.relationship("TestCase", back_populates="executions")
+    defects = db.relationship("Defect", back_populates="execution", lazy=True)
 
     def capture_test_case_snapshot(self, test_case):
         self.testcase = test_case
@@ -158,20 +157,46 @@ class TestExecution(db.Model):
 
 class Defect(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    project_id = db.Column(db.Integer, db.ForeignKey("project.id"), nullable=False)
-    version_id = db.Column(db.Integer, db.ForeignKey("version.id"))
+    test_execution_id = db.Column(
+        db.Integer,
+        db.ForeignKey("test_execution.id"),
+        nullable=False,
+        index=True,
+    )
+    code = db.Column(db.String(40), unique=True, nullable=False, index=True)
     title = db.Column(db.String(200), nullable=False)
-    severity = db.Column(db.String(20), default="medium", nullable=False)
+    description = db.Column(db.Text, nullable=False)
+    component = db.Column(db.String(80), nullable=False)
+    severity = db.Column(db.String(20), default="major", nullable=False)
+    priority = db.Column(db.String(20), default="P2", nullable=False)
     status = db.Column(db.String(30), default="open", nullable=False)
-    reported_by = db.Column(db.String(80))
-    description = db.Column(db.Text)
+    reproduction_steps = db.Column(db.Text, nullable=False)
+    observed_result = db.Column(db.Text, nullable=False)
+    reporter = db.Column(db.String(80), nullable=False)
+    assignee = db.Column(db.String(80))
+    resolution = db.Column(db.String(80))
+    resolution_note = db.Column(db.Text)
+    environment_snapshot = db.Column(db.String(120))
+    actual_result_snapshot = db.Column(db.Text)
+    executed_at_snapshot = db.Column(db.DateTime(timezone=True), nullable=False)
     created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+        nullable=False,
+    )
 
-    project = db.relationship("Project", back_populates="defects")
-    version = db.relationship("Version", back_populates="defects")
+    execution = db.relationship("TestExecution", back_populates="defects")
+
+    def capture_execution_snapshot(self, execution):
+        self.execution = execution
+        self.environment_snapshot = execution.environment
+        self.actual_result_snapshot = execution.actual_result
+        self.executed_at_snapshot = execution.executed_at
 
     def __repr__(self):
-        return f"<Defect {self.title}>"
+        return f"<Defect {self.code}>"
 
 
 class LogFile(db.Model):

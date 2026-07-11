@@ -14,13 +14,13 @@
 - Version 版本管理：支持列表、新增、详情、编辑、删除，并关联所属 Project；同一 Project 下版本编码唯一。
 - TestCase 测试用例管理：支持列表、新增、详情、编辑、删除，并关联所属 Version；同一 Version 下用例编号唯一。
 - TestExecution 执行记录管理：支持列表、新增、详情、编辑、删除，并关联所属 TestCase；failed 结果要求填写实际结果，创建时自动保存用例内容快照。
+- Defect 缺陷管理：支持列表、新增、详情、编辑和删除；缺陷只关联来源 TestExecution，并自动保存执行环境、实际结果和执行时间快照。
 - 数据一致性：TestCase 仅通过 Version 获取 Project，TestExecution 仅通过 TestCase 获取 Version 和 Project，避免重复父级字段产生矛盾。
 - 历史可追溯：执行记录保存用例编号、标题、前置条件、步骤和预期结果快照；后续修改用例不会覆盖已有执行历史。
 - SQLite 外键约束：开发环境和 pytest 环境均启用 `PRAGMA foreign_keys=ON`，数据库会拒绝孤儿关联记录。
 - 删除保护：已有 Version 的 Project 不允许直接删除；已有 TestCase 的 Version 不允许直接删除；已有 TestExecution 的 TestCase 不允许直接删除，避免误删重要测试记录。
-- 缺陷管理页面框架：列表页和占位按钮。
 - 模拟 Log 管理页面框架：列表页和占位按钮。
-- pytest：覆盖首页访问、Project / Version / TestCase / TestExecution CRUD、表单校验和关联删除保护。
+- pytest：覆盖首页访问、Project / Version / TestCase / TestExecution / Defect CRUD、表单校验、快照和关联删除保护。
 
 ## 技术栈
 
@@ -68,7 +68,7 @@ audio-test-management-platform/
 - `app/extensions.py`：集中放置 `db`、`migrate`、`login_manager`，避免循环导入。
 - `app/models.py`：基础数据模型，包括 `User`、`Project`、`Version`、`TestCase`、`TestExecution`、`Defect`、`LogFile`。
 - `app/blueprints/`：按业务模块拆分路由，便于后续逐步扩展 CRUD。
-- `app/templates/`：Jinja2 页面模板，包含基础布局、Dashboard、登录注册，以及 Project / Version / TestCase / TestExecution 页面。
+- `app/templates/`：Jinja2 页面模板，包含基础布局、Dashboard、登录注册，以及 Project / Version / TestCase / TestExecution / Defect 页面。
 - `app/static/`：静态资源，目前包含基础 CSS。
 - `migrations/`：Flask-Migrate 迁移目录，后续数据库结构变更放在这里。
 - `tests/`：pytest 测试目录，覆盖首页访问、核心 CRUD、表单校验和删除保护。
@@ -106,7 +106,7 @@ http://127.0.0.1:5000
 
 ## 数据库说明
 
-当前已使用 Flask-Migrate 管理数据库结构。Project、Version、TestCase、TestExecution 已接入数据库 CRUD；`init-db` 仅用于插入本地 mock/demo/sample 示例数据。
+当前已使用 Flask-Migrate 管理数据库结构。Project、Version、TestCase、TestExecution、Defect 已接入数据库 CRUD；`init-db` 仅用于插入本地 mock/demo/sample 示例数据。
 
 创建或更新本地 SQLite 表结构：
 
@@ -136,7 +136,7 @@ flask --app run.py init-db
 
 ## 后续扩展建议
 
-- 进入 Defect 缺陷模块，实现缺陷记录与 Project / Version / TestCase / TestExecution 的关联。
+- 为 Defect 增加受控状态流转和变更历史。
 - 为 Log 增加完整 CRUD。
 - 增加搜索、筛选、分页和导入导出。
 - 将 Dashboard 统计从 mock 数据切换为数据库聚合查询。

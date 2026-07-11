@@ -2,7 +2,13 @@ from sqlalchemy import inspect
 
 from app import create_app
 from app.extensions import db
-from app.models import Project, TestCase as ChecklistTestCase, TestExecution as ExecutionRecord, User
+from app.models import (
+    Defect,
+    Project,
+    TestCase as ChecklistTestCase,
+    TestExecution as ExecutionRecord,
+    User,
+)
 
 
 def make_app(tmp_path):
@@ -43,3 +49,7 @@ def test_init_db_seeds_demo_data_when_schema_exists(tmp_path):
         assert Project.query.filter_by(code="MOCK-AUDIO-01").count() == 1
         assert ChecklistTestCase.query.filter_by(code="TC_AUDIO_001").count() == 1
         assert ExecutionRecord.query.filter_by(result="passed", tester="Demo Tester").count() == 1
+        defect = Defect.query.filter_by(code="DEF_DEMO_001").one()
+        assert defect.environment_snapshot == "Android Demo Env"
+        assert defect.actual_result_snapshot == "Demo actual result is recorded."
+        assert defect.executed_at_snapshot == defect.execution.executed_at

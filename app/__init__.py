@@ -164,21 +164,23 @@ def seed_demo_data():
         )
         execution.capture_test_case_snapshot(testcase)
         db.session.add(execution)
+        db.session.flush()
 
-    defect = Defect.query.filter_by(
-        project_id=project.id,
-        title="Mock playback interruption issue",
-    ).first()
+    defect = Defect.query.filter_by(code="DEF_DEMO_001").first()
     if defect is None:
         defect = Defect(
-            project_id=project.id,
-            version_id=version.id,
-            title="Mock playback interruption issue",
-            severity="medium",
+            code="DEF_DEMO_001",
+            title="Sample Audio Interruption Defect",
+            description="Sample issue observed during a demo execution.",
+            component="Audio",
+            severity="major",
+            priority="P1",
             status="open",
-            reported_by="demo_tester",
-            description="Sample defect record with no real product details.",
+            reproduction_steps="Run the sample playback flow and observe demo output.",
+            observed_result="Demo audio output is interrupted.",
+            reporter="Demo Reporter",
         )
+        defect.capture_execution_snapshot(execution)
         db.session.add(defect)
 
     log_file = LogFile.query.filter_by(

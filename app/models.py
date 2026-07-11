@@ -71,10 +71,56 @@ class Version(db.Model):
 
     project = db.relationship("Project", back_populates="versions")
     testcases = db.relationship("TestCase", back_populates="version", lazy=True)
+    test_runs = db.relationship("TestRun", back_populates="version", lazy=True)
     log_files = db.relationship("LogFile", back_populates="version", lazy=True)
 
     def __repr__(self):
         return f"<Version {self.name}>"
+
+
+class TestRun(db.Model):
+    __table_args__ = (
+        db.UniqueConstraint(
+            "version_id",
+            "source_type",
+            "report_hash",
+            name="uq_test_run_version_source_hash",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    version_id = db.Column(
+        db.Integer,
+        db.ForeignKey("version.id"),
+        nullable=False,
+        index=True,
+    )
+    source_type = db.Column(
+        db.String(30),
+        default="junit_xml",
+        nullable=False,
+    )
+    report_hash = db.Column(db.String(64), nullable=False)
+    runner = db.Column(db.String(80))
+    environment = db.Column(db.String(120))
+    started_at = db.Column(db.DateTime(timezone=True))
+    finished_at = db.Column(db.DateTime(timezone=True))
+    imported_at = db.Column(
+        db.DateTime(timezone=True),
+        default=utc_now,
+        nullable=False,
+    )
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        default=utc_now,
+        nullable=False,
+    )
+
+    version = db.relationship("Version", back_populates="test_runs")
+    executions = db.relationship("TestExecution", back_populates="test_run", lazy=True)
+
+    def __repr__(self):
+        return f"<TestRun {self.source_type}:{self.report_hash[:12]}>"
 
 
 class TestCase(db.Model):
@@ -110,12 +156,20 @@ class TestCase(db.Model):
 
 class TestExecution(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    test_run_id = db.Column(
+        db.Integer,
+        db.ForeignKey("test_run.id"),
+        nullable=True,
+        index=True,
+    )
     test_case_id = db.Column(
         db.Integer,
         db.ForeignKey("test_case.id"),
         nullable=False,
         index=True,
     )
+    external_case_key = db.Column(db.String(255))
+    duration_seconds = db.Column(db.Numeric(10, 3))
     result = db.Column(db.String(30), default="passed", nullable=False, index=True)
     actual_result = db.Column(db.Text)
     tester = db.Column(db.String(80), nullable=False)
@@ -141,6 +195,7 @@ class TestExecution(db.Model):
     )
 
     testcase = db.relationship("TestCase", back_populates="executions")
+    test_run = db.relationship("TestRun", back_populates="executions")
     defects = db.relationship("Defect", back_populates="execution", lazy=True)
 
     def capture_test_case_snapshot(self, test_case):

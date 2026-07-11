@@ -39,6 +39,13 @@ def test_migration_upgrade_creates_consistent_schema(tmp_path):
         defect_columns = {
             column["name"]: column for column in inspector.get_columns("defect")
         }
+        test_run_columns = {
+            column["name"]: column for column in inspector.get_columns("test_run")
+        }
+        test_run_unique_constraints = {
+            constraint["name"]: tuple(constraint["column_names"])
+            for constraint in inspector.get_unique_constraints("test_run")
+        }
 
         assert "project_id" not in test_case_columns
         assert "is_active" not in test_case_columns
@@ -49,11 +56,15 @@ def test_migration_upgrade_creates_consistent_schema(tmp_path):
         assert execution_columns["test_case_title_snapshot"]["nullable"] is False
         assert execution_columns["steps_snapshot"]["nullable"] is False
         assert execution_columns["expected_result_snapshot"]["nullable"] is False
+        assert execution_columns["test_run_id"]["nullable"] is True
+        assert execution_columns["external_case_key"]["nullable"] is True
+        assert execution_columns["duration_seconds"]["nullable"] is True
         assert "ix_test_case_status" in test_case_indexes
         assert {
             "ix_test_execution_test_case_id",
             "ix_test_execution_result",
             "ix_test_execution_executed_at",
+            "ix_test_execution_test_run_id",
         } <= execution_indexes
         assert "project_id" not in defect_columns
         assert "version_id" not in defect_columns
@@ -61,6 +72,14 @@ def test_migration_upgrade_creates_consistent_schema(tmp_path):
         assert defect_columns["test_execution_id"]["nullable"] is False
         assert defect_columns["code"]["nullable"] is False
         assert defect_columns["executed_at_snapshot"]["nullable"] is False
+        assert test_run_columns["version_id"]["nullable"] is False
+        assert test_run_columns["source_type"]["nullable"] is False
+        assert test_run_columns["report_hash"]["nullable"] is False
+        assert test_run_unique_constraints["uq_test_run_version_source_hash"] == (
+            "version_id",
+            "source_type",
+            "report_hash",
+        )
 
 
 def test_migration_backfills_existing_mock_execution_snapshots(tmp_path):
@@ -193,6 +212,9 @@ def test_migration_backfills_existing_mock_execution_snapshots(tmp_path):
         assert db.session.execute(
             text("SELECT result FROM test_execution WHERE id = 401")
         ).scalar_one() == "failed"
+        assert db.session.execute(
+            text("SELECT test_run_id FROM test_execution WHERE id = 401")
+        ).scalar_one() is None
         assert db.session.execute(text("SELECT COUNT(*) FROM test_case")).scalar_one() == 1
         assert db.session.execute(text("SELECT COUNT(*) FROM test_execution")).scalar_one() == 1
         assert db.session.execute(text("SELECT COUNT(*) FROM defect")).scalar_one() == 1

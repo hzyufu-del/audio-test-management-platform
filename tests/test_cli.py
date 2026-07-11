@@ -7,6 +7,7 @@ from app.models import (
     Project,
     TestCase as ChecklistTestCase,
     TestExecution as ExecutionRecord,
+    TestRun as AutomationTestRun,
     User,
     Version,
 )
@@ -32,6 +33,19 @@ def test_init_db_does_not_create_tables_before_migrations(tmp_path):
 
     with app.app_context():
         assert inspect(db.engine).get_table_names() == []
+
+
+def test_init_db_rejects_schema_missing_test_run_table(tmp_path):
+    app = make_app(tmp_path)
+
+    with app.app_context():
+        db.create_all()
+        AutomationTestRun.__table__.drop(db.engine)
+
+    result = app.test_cli_runner().invoke(args=["init-db"])
+
+    assert result.exit_code != 0
+    assert "db upgrade" in result.output
 
 
 def test_init_db_seeds_demo_data_when_schema_exists(tmp_path):

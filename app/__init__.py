@@ -63,11 +63,29 @@ def register_cli_commands(app):
 
 
 def ensure_migrated_database():
-    from .models import Defect, LogFile, Project, TestCase, TestExecution, User, Version
+    from .models import (
+        Defect,
+        LogFile,
+        Project,
+        TestCase,
+        TestExecution,
+        TestRun,
+        User,
+        Version,
+    )
 
     required_tables = {
         model.__tablename__
-        for model in (User, Project, Version, TestCase, TestExecution, Defect, LogFile)
+        for model in (
+            User,
+            Project,
+            Version,
+            TestCase,
+            TestRun,
+            TestExecution,
+            Defect,
+            LogFile,
+        )
     }
     existing_tables = set(inspect(db.engine).get_table_names())
     missing_tables = required_tables - existing_tables

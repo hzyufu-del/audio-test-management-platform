@@ -208,7 +208,7 @@ def get_selected_execution_id(form_data, defect):
         return str(defect.test_execution_id)
     if form_data:
         return form_data["test_execution_id"]
-    return ""
+    return request.args.get("test_execution_id", "").strip()
 
 
 def get_selected_value(form_data, defect, field, default):

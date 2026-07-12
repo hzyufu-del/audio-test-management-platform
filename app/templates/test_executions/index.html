@@ -11,6 +11,8 @@
     </div>
     <div class="d-flex flex-wrap gap-2">
       <a class="btn btn-primary" href="{{ url_for('executions.create') }}">新增执行记录</a>
+      <a class="btn btn-outline-primary" href="{{ url_for('test_runs.import_report') }}">导入 JUnit XML</a>
+      <a class="btn btn-outline-secondary" href="{{ url_for('test_runs.index') }}">查看 Test Runs</a>
       <a class="btn btn-outline-secondary" href="{{ url_for('testcases.index') }}">返回用例列表</a>
     </div>
   </section>

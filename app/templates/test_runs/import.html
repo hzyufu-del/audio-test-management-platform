@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block title %}导入 JUnit XML - 消费电子音频产品测试管理与自动化辅助平台{% endblock %}
+
+{% block content %}
+  <section class="page-heading">
+    <div>
+      <p class="eyebrow">junit xml import</p>
+      <h1>导入 JUnit XML</h1>
+      <p class="text-muted mb-0">选择目标版本并导入 sample / demo 自动化结果。</p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{{ url_for('test_runs.index') }}">返回 Test Runs</a>
+  </section>
+
+  {% if errors %}
+    <div class="alert alert-danger" role="alert">
+      <ul class="mb-0">
+        {% for error in errors %}<li>{{ error }}</li>{% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  {% if validation_items %}
+    <section class="panel mb-3">
+      <div class="panel-header">
+        <h2>未匹配项</h2>
+        <span class="text-muted small">共 {{ validation_items|length }} 项</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Testcase</th>
+              <th>Classname</th>
+              <th>Suite</th>
+              <th>用例编号</th>
+              <th>原因</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in validation_items %}
+              <tr>
+                <td>{{ item.testcase_name }}</td>
+                <td><code>{{ item.classname }}</code></td>
+                <td>{{ item.suite_path }}</td>
+                <td><code>{{ item.test_case_code }}</code></td>
+                <td>{{ item.reason }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  {% endif %}
+
+  <section class="panel form-panel">
+    <form method="post" enctype="multipart/form-data">
+      <div class="mb-3">
+        <label class="form-label" for="version_id">目标版本</label>
+        <select class="form-select" id="version_id" name="version_id" required>
+          <option value="">请选择版本</option>
+          {% for version in versions %}
+            <option value="{{ version.id }}" {% if selected_version_id == version.id|string %}selected{% endif %}>
+              {{ version.project.name }} / {{ version.name }} / {{ version.code }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="row g-3 mb-3">
+        <div class="col-12 col-md-6">
+          <label class="form-label" for="runner">执行人</label>
+          <input class="form-control" id="runner" name="runner" value="{{ runner }}" placeholder="Demo Automation Runner">
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label" for="environment">环境</label>
+          <input class="form-control" id="environment" name="environment" value="{{ environment }}" placeholder="Automation Demo Env">
+        </div>
+      </div>
+      <div class="mb-4">
+        <label class="form-label" for="junit_file">JUnit XML 文件</label>
+        <input class="form-control" id="junit_file" name="junit_file" type="file" accept=".xml,text/xml,application/xml" required>
+        <div class="form-text">最大 5 MiB；文件仅在内存中解析，不保存原始 XML。</div>
+      </div>
+      <div class="d-flex flex-wrap gap-2">
+        <button class="btn btn-primary" type="submit">开始导入</button>
+        <a class="btn btn-outline-secondary" href="{{ url_for('test_runs.index') }}">取消</a>
+      </div>
+    </form>
+  </section>
+{% endblock %}

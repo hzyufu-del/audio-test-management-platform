@@ -14,6 +14,7 @@
 - Version 版本管理：支持列表、新增、详情、编辑、删除，并关联所属 Project；同一 Project 下版本编码唯一。
 - TestCase 测试用例管理：支持列表、新增、详情、编辑、删除，并关联所属 Version；同一 Version 下用例编号唯一。
 - TestExecution 执行记录管理：支持列表、新增、详情、编辑、删除，并关联所属 TestCase；failed 结果要求填写实际结果，创建时自动保存用例内容快照。
+- TestRun 自动化运行管理：支持 TestRun 列表、详情和 JUnit XML Web 导入；导入过程使用安全 Parser、严格 TestCase 匹配、报告哈希幂等和单事务写入。
 - Defect 缺陷管理：支持列表、新增、详情、编辑和删除；缺陷只能来源于 failed TestExecution，并自动保存执行环境、实际结果和执行时间快照。
 - 数据一致性：TestCase 仅通过 Version 获取 Project，TestExecution 仅通过 TestCase 获取 Version 和 Project，避免重复父级字段产生矛盾。
 - 历史可追溯：执行记录保存用例编号、标题、前置条件、步骤和预期结果快照；后续修改用例不会覆盖已有执行历史。
@@ -71,6 +72,8 @@ audio-test-management-platform/
 - `app/extensions.py`：集中放置 `db`、`migrate`、`login_manager`，避免循环导入。
 - `app/models.py`：基础数据模型，包括 `User`、`Project`、`Version`、`TestCase`、`TestExecution`、`Defect`、`LogFile`。
 - `app/services/dashboard_service.py`：集中构建 Dashboard 查询范围、聚合执行与缺陷指标、生成趋势和版本质量数据。
+- `app/services/junit_xml_parser.py`：安全解析 pytest JUnit XML，输出与数据库无关的标准化结果。
+- `app/services/junit_import_service.py`：严格匹配目标 Version 下的 TestCase，并在单事务中创建 TestRun 与 TestExecution。
 - `app/blueprints/`：按业务模块拆分路由，便于后续逐步扩展 CRUD。
 - `app/templates/`：Jinja2 页面模板，包含基础布局、Dashboard、登录注册，以及 Project / Version / TestCase / TestExecution / Defect 页面。
 - `app/static/`：静态资源，目前包含基础 CSS。
@@ -123,6 +126,8 @@ flask --app run.py db upgrade
 ```powershell
 flask --app run.py init-db
 ```
+
+可公开展示的 JUnit XML 示例位于 `docs/samples/junit_demo_results.xml`，其中用例编码与 `init-db` 的 Demo Firmware Alpha 数据匹配。
 
 后续如果修改模型，可以使用 Flask-Migrate 生成迁移：
 

@@ -40,6 +40,7 @@ def register_blueprints(app):
     from .blueprints.logs import bp as logs_bp
     from .blueprints.projects import bp as projects_bp
     from .blueprints.testcases import bp as testcases_bp
+    from .blueprints.test_runs import bp as test_runs_bp
     from .blueprints.versions import bp as versions_bp
 
     app.register_blueprint(dashboard_bp)
@@ -48,6 +49,7 @@ def register_blueprints(app):
     app.register_blueprint(versions_bp)
     app.register_blueprint(testcases_bp)
     app.register_blueprint(executions_bp)
+    app.register_blueprint(test_runs_bp)
     app.register_blueprint(defects_bp)
     app.register_blueprint(logs_bp)
 

@@ -288,6 +288,39 @@ body {
   padding-right: 0;
 }
 
+.run-summary {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.run-summary > div {
+  background: var(--app-panel);
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+}
+
+.run-summary span {
+  color: var(--app-muted);
+  font-size: 0.85rem;
+}
+
+.run-summary strong {
+  font-size: 1.5rem;
+}
+
+.compact-code {
+  display: inline-block;
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
 @media (max-width: 1200px) {
   .dashboard-kpis {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -317,7 +350,8 @@ body {
   .dashboard-filter,
   .dashboard-kpis,
   .dashboard-chart-grid,
-  .dashboard-attention-grid {
+  .dashboard-attention-grid,
+  .run-summary {
     grid-template-columns: 1fr;
   }
 

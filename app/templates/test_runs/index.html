@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}Test Runs - 消费电子音频产品测试管理与自动化辅助平台{% endblock %}
+
+{% block content %}
+  <section class="page-heading">
+    <div>
+      <p class="eyebrow">automation test runs</p>
+      <h1>自动化测试运行</h1>
+      <p class="text-muted mb-0">JUnit XML 导入批次及执行结果。</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-primary" href="{{ url_for('test_runs.import_report') }}">导入 JUnit XML</a>
+      <a class="btn btn-outline-secondary" href="{{ url_for('executions.index') }}">查看执行记录</a>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-header">
+      <h2>TestRun 列表</h2>
+      <span class="text-muted small">共 {{ run_rows|length }} 个运行批次</span>
+    </div>
+    {% if run_rows %}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Project / Version</th>
+              <th>来源</th>
+              <th>执行人 / 环境</th>
+              <th>导入时间</th>
+              <th>总数</th>
+              <th>Passed</th>
+              <th>Failed</th>
+              <th>Skipped</th>
+              <th class="text-end">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in run_rows %}
+              <tr>
+                <td><strong>#{{ row.run.id }}</strong></td>
+                <td>
+                  <span class="d-block fw-semibold">{{ row.version_name }}</span>
+                  <span class="text-muted small">{{ row.project_name }}</span>
+                </td>
+                <td><code>{{ row.run.source_type }}</code></td>
+                <td>
+                  <span class="d-block">{{ row.run.runner or "JUnit Automation" }}</span>
+                  <span class="text-muted small">{{ row.run.environment or "-" }}</span>
+                </td>
+                <td>{{ row.run.imported_at.strftime("%Y-%m-%d %H:%M") if row.run.imported_at else "-" }}</td>
+                <td data-run-stat="total">{{ row.total }}</td>
+                <td class="text-success" data-run-stat="passed">{{ row.passed }}</td>
+                <td class="text-danger" data-run-stat="failed">{{ row.failed }}</td>
+                <td data-run-stat="skipped">{{ row.skipped }}</td>
+                <td class="text-end">
+                  <a class="btn btn-sm btn-outline-primary" href="{{ url_for('test_runs.detail', test_run_id=row.run.id) }}">查看</a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <h2>暂无自动化测试运行</h2>
+        <p class="text-muted">导入一份 sample JUnit XML 后，这里会显示运行批次。</p>
+        <a class="btn btn-primary" href="{{ url_for('test_runs.import_report') }}">导入 JUnit XML</a>
+      </div>
+    {% endif %}
+  </section>
+{% endblock %}

@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}TestRun #{{ test_run.id }} - 消费电子音频产品测试管理与自动化辅助平台{% endblock %}
+
+{% block content %}
+  <section class="page-heading">
+    <div>
+      <p class="eyebrow">automation run detail</p>
+      <h1>TestRun 详情 #{{ test_run.id }}</h1>
+      <p class="text-muted mb-0">{{ test_run.version.project.name }} / {{ test_run.version.name }}</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-primary" href="{{ url_for('test_runs.import_report') }}">导入新报告</a>
+      <a class="btn btn-outline-secondary" href="{{ url_for('test_runs.index') }}">返回 Test Runs</a>
+      <a class="btn btn-outline-secondary" href="{{ url_for('dashboard.index') }}">返回 Dashboard</a>
+    </div>
+  </section>
+
+  {% if import_status %}
+    <div class="alert {% if import_status == 'imported' %}alert-success{% else %}alert-info{% endif %}" role="status">
+      {% if import_status == "imported" %}
+        JUnit 报告导入成功，本次创建 {{ imported_count or 0 }} 条执行记录。
+      {% else %}
+        该报告已导入，本次创建 0 条执行记录，以下为已有 TestRun。
+      {% endif %}
+    </div>
+  {% endif %}
+
+  <section class="panel">
+    <div class="detail-grid">
+      <div><span>Project</span><strong>{{ test_run.version.project.name }}</strong></div>
+      <div><span>Version</span><strong>{{ test_run.version.name }}</strong></div>
+      <div><span>来源类型</span><strong>{{ test_run.source_type }}</strong></div>
+      <div><span>报告标识</span><strong><code>{{ test_run.report_hash[:12] }}...</code></strong></div>
+      <div><span>执行人</span><strong>{{ test_run.runner or "JUnit Automation" }}</strong></div>
+      <div><span>环境</span><strong>{{ test_run.environment or "-" }}</strong></div>
+      <div><span>开始时间</span><strong>{{ test_run.started_at.strftime("%Y-%m-%d %H:%M:%S") if test_run.started_at else "-" }}</strong></div>
+      <div><span>结束时间</span><strong>{{ test_run.finished_at.strftime("%Y-%m-%d %H:%M:%S") if test_run.finished_at else "-" }}</strong></div>
+      <div><span>导入时间</span><strong>{{ test_run.imported_at.strftime("%Y-%m-%d %H:%M:%S") if test_run.imported_at else "-" }}</strong></div>
+    </div>
+  </section>
+
+  <section class="run-summary mt-3" aria-label="TestRun 结果统计">
+    <div><span>总执行数</span><strong data-result-count="total">{{ counts.total }}</strong></div>
+    <div><span>Passed</span><strong class="text-success" data-result-count="passed">{{ counts.passed }}</strong></div>
+    <div><span>Failed</span><strong class="text-danger" data-result-count="failed">{{ counts.failed }}</strong></div>
+    <div><span>Skipped</span><strong data-result-count="skipped">{{ counts.skipped }}</strong></div>
+  </section>
+
+  <section class="panel mt-3">
+    <div class="panel-header">
+      <h2>关联 TestExecution</h2>
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('executions.index') }}">查看执行记录</a>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <th>External key</th>
+            <th>TestCase code</th>
+            <th>用例标题快照</th>
+            <th>结果</th>
+            <th>耗时</th>
+            <th>执行时间</th>
+            <th class="text-end">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for execution in executions %}
+            <tr>
+              <td><code class="compact-code">{{ execution.external_case_key[:22] }}...</code></td>
+              <td><code>{{ execution.test_case_code_snapshot }}</code></td>
+              <td>{{ execution.test_case_title_snapshot }}</td>
+              <td>
+                {% if execution.result == "passed" %}
+                  <span class="badge text-bg-success">passed</span>
+                {% elif execution.result == "failed" %}
+                  <span class="badge text-bg-danger">failed</span>
+                {% else %}
+                  <span class="badge text-bg-secondary">skipped</span>
+                {% endif %}
+              </td>
+              <td>{{ "%.3f"|format(execution.duration_seconds) if execution.duration_seconds is not none else "-" }} s</td>
+              <td>{{ execution.executed_at.strftime("%Y-%m-%d %H:%M:%S") }}</td>
+              <td class="text-end">
+                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('executions.detail', execution_id=execution.id) }}">查看</a>
+                {% if execution.result == "failed" %}
+                  <a class="btn btn-sm btn-outline-danger" href="{{ url_for('defects.create', test_execution_id=execution.id) }}">创建缺陷</a>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

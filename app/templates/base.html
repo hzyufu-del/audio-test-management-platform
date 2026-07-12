@@ -21,7 +21,14 @@
             <li class="nav-item"><a class="nav-link" href="{{ url_for('projects.index') }}">项目</a></li>
             <li class="nav-item"><a class="nav-link" href="{{ url_for('versions.index') }}">版本</a></li>
             <li class="nav-item"><a class="nav-link" href="{{ url_for('testcases.index') }}">用例</a></li>
-            <li class="nav-item"><a class="nav-link" href="{{ url_for('executions.index') }}">执行记录</a></li>
+            <li class="nav-item dropdown">
+              <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">执行</a>
+              <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="{{ url_for('executions.index') }}">执行记录</a></li>
+                <li><a class="dropdown-item" href="{{ url_for('test_runs.index') }}">Test Runs</a></li>
+                <li><a class="dropdown-item" href="{{ url_for('test_runs.import_report') }}">导入 JUnit XML</a></li>
+              </ul>
+            </li>
             <li class="nav-item"><a class="nav-link" href="{{ url_for('defects.index') }}">缺陷</a></li>
             <li class="nav-item"><a class="nav-link" href="{{ url_for('logs.index') }}">Log</a></li>
           </ul>

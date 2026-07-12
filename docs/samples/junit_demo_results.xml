@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="demo-audio-automation" tests="4" timestamp="2026-07-12T02:00:00Z">
+  <testcase classname="demo.audio.playback" name="test_playback[standard]" time="1.250">
+    <properties>
+      <property name="platform_test_case_code" value="TC_AUDIO_001" />
+    </properties>
+  </testcase>
+  <testcase classname="demo.audio.playback" name="test_playback[recovery]" time="0.750">
+    <properties>
+      <property name="platform_test_case_code" value="TC_AUDIO_001" />
+    </properties>
+    <failure type="AssertionError" message="Sample playback state mismatch">Demo playback state differed from the sample expectation.</failure>
+  </testcase>
+  <testcase classname="demo.bluetooth.reconnect" name="test_reconnect[resume]" time="0.500">
+    <properties>
+      <property name="platform_test_case_code" value="TC_BT_001" />
+    </properties>
+    <error type="RuntimeError" message="Sample reconnect setup error">Demo reconnect setup could not continue.</error>
+  </testcase>
+  <testcase classname="demo.bluetooth.reconnect" name="test_reconnect[optional]" time="0.125">
+    <properties>
+      <property name="platform_test_case_code" value="TC_BT_001" />
+    </properties>
+    <skipped message="Sample optional mode is disabled" />
+  </testcase>
+</testsuite>

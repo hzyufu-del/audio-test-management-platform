@@ -25,7 +25,7 @@
 
 ## 技术栈
 
-- Python
+- Python 3.12
 - Flask
 - Flask-SQLAlchemy
 - Flask-Migrate
@@ -34,6 +34,8 @@
 - Chart.js 4.4.7
 - SQLite
 - pytest
+- pytest-cov
+- Ruff
 
 ## 目录结构
 
@@ -110,6 +112,28 @@ http://127.0.0.1:5000
 ```powershell
 .\.venv\Scripts\python.exe -m pytest
 ```
+
+## 代码质量与 CI
+
+安装本地开发和 CI 依赖：
+
+```powershell
+pip install -r requirements-dev.txt
+```
+
+运行 Ruff 基础代码检查：
+
+```powershell
+ruff check .
+```
+
+运行测试并生成终端缺失行报告和 `coverage.xml`：
+
+```powershell
+pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-fail-under=90
+```
+
+GitHub Actions 会在 push 和 Pull Request 时检查依赖、Python 编译、Ruff、空 SQLite 数据库迁移、模型迁移一致性、pytest 和 coverage 门槛。
 
 ## 数据库说明
 

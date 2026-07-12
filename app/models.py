@@ -155,6 +155,14 @@ class TestCase(db.Model):
 
 
 class TestExecution(db.Model):
+    __table_args__ = (
+        db.UniqueConstraint(
+            "test_run_id",
+            "external_case_key",
+            name="uq_test_execution_run_external_key",
+        ),
+    )
+
     id = db.Column(db.Integer, primary_key=True)
     test_run_id = db.Column(
         db.Integer,

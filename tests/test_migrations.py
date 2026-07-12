@@ -36,6 +36,10 @@ def test_migration_upgrade_creates_consistent_schema(tmp_path):
         execution_indexes = {
             index["name"] for index in inspector.get_indexes("test_execution")
         }
+        execution_unique_constraints = {
+            constraint["name"]: tuple(constraint["column_names"])
+            for constraint in inspector.get_unique_constraints("test_execution")
+        }
         defect_columns = {
             column["name"]: column for column in inspector.get_columns("defect")
         }
@@ -66,6 +70,9 @@ def test_migration_upgrade_creates_consistent_schema(tmp_path):
             "ix_test_execution_executed_at",
             "ix_test_execution_test_run_id",
         } <= execution_indexes
+        assert execution_unique_constraints[
+            "uq_test_execution_run_external_key"
+        ] == ("test_run_id", "external_case_key")
         assert "project_id" not in defect_columns
         assert "version_id" not in defect_columns
         assert "reported_by" not in defect_columns

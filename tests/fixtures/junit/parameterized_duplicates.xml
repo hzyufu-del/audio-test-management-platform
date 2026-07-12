@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="sample-codec-suite">
+  <testcase classname="sample.codec" name="test_codec[aac]" time="0.100">
+    <properties>
+      <property name="platform_test_case_code" value="TC_SAMPLE_CODEC_001" />
+    </properties>
+  </testcase>
+  <testcase classname="sample.codec" name="test_codec[aac]" time="0.110">
+    <properties>
+      <property name="platform_test_case_code" value="TC_SAMPLE_CODEC_001" />
+    </properties>
+  </testcase>
+  <testcase classname="sample.codec" name="test_codec[sbc]" time="0.120">
+    <properties>
+      <property name="platform_test_case_code" value="TC_SAMPLE_CODEC_001" />
+    </properties>
+  </testcase>
+</testsuite>

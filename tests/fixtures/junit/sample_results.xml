@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="sample-audio-suite" tests="4" timestamp="2026-07-12T09:00:00+08:00">
+  <testcase classname="sample.audio" name="test_playback" time="1.250" timestamp="2026-07-12T01:01:00Z">
+    <properties>
+      <property name="platform_test_case_code" value="TC_SAMPLE_AUDIO_001" />
+    </properties>
+  </testcase>
+  <testcase classname="sample.audio" name="test_connection" time="0.750">
+    <properties>
+      <property name="platform_test_case_code" value="TC_SAMPLE_AUDIO_002" />
+    </properties>
+    <failure type="AssertionError" message="Sample connection state mismatch">Sample expected state did not match demo output.</failure>
+  </testcase>
+  <testcase classname="sample.audio" name="test_recovery" time="0.500">
+    <properties>
+      <property name="platform_test_case_code" value="TC_SAMPLE_AUDIO_003" />
+    </properties>
+    <error type="RuntimeError" message="Sample recovery setup error">Demo setup could not continue.</error>
+  </testcase>
+  <testcase classname="sample.audio" name="test_optional_mode" time="0.125">
+    <properties>
+      <property name="platform_test_case_code" value="TC_SAMPLE_AUDIO_004" />
+    </properties>
+    <skipped message="Sample mode is not enabled" />
+  </testcase>
+</testsuite>

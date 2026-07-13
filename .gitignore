@@ -24,6 +24,7 @@ coverage.xml
 htmlcov/
 
 # Editor / OS
+.codex/
 .vscode/
 .idea/
 .DS_Store

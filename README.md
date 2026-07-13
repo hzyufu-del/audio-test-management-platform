@@ -1,177 +1,198 @@
 # audio-test-management-platform
 
+[![CI](https://github.com/hzyufu-del/audio-test-management-platform/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/hzyufu-del/audio-test-management-platform/actions/workflows/ci.yml?query=branch%3Amaster)
+
 中文名：消费电子音频产品测试管理与自动化辅助平台
 
-这是一个用于求职作品集和 GitHub 展示的企业级软件测试项目。项目模拟消费电子音频产品测试团队的日常管理流程，覆盖测试项目、版本、Checklist 用例、执行记录、缺陷记录、模拟 Log 文件和统计看板。
+面向消费电子音频产品测试场景的测试管理与自动化辅助平台模拟项目。
 
-> 数据边界：本项目只使用 mock / demo / sample 数据，不包含任何真实公司项目名、真实版本号、真实 Log、真实测试用例、真实缺陷编号或内部截图。
+## 项目定位
 
-## 当前已完成功能
+项目根据测试流程进行抽象，覆盖 Project、Version、TestCase、TestExecution、Defect、TestRun 和 Dashboard。它用于求职作品展示，不是任何公司内部系统的复刻。
 
-- Dashboard V1 测试质量决策页：基于数据库聚合 Project、Version、有效 TestCase、执行结果、通过率、失败率和当前缺陷风险；支持 Project、Version、7 天 / 30 天 / 全部时间筛选，并提供趋势图、版本质量表和需关注项。
-- 登录 / 注册页面框架：提供基础账号入口，后续可扩展权限。
-- Project 项目管理：支持列表、新增、详情、编辑、删除、基础表单校验和重复编码校验。
-- Version 版本管理：支持列表、新增、详情、编辑、删除，并关联所属 Project；同一 Project 下版本编码唯一。
-- TestCase 测试用例管理：支持列表、新增、详情、编辑、删除，并关联所属 Version；同一 Version 下用例编号唯一。
-- TestExecution 执行记录管理：支持列表、新增、详情、编辑、删除，并关联所属 TestCase；failed 结果要求填写实际结果，创建时自动保存用例内容快照。
-- TestRun 自动化运行管理：支持 TestRun 列表、详情和 JUnit XML Web 导入；导入过程使用安全 Parser、严格 TestCase 匹配、报告哈希幂等和单事务写入。
-- Defect 缺陷管理：支持列表、新增、详情、编辑和删除；缺陷只能来源于 failed TestExecution，并自动保存执行环境、实际结果和执行时间快照。
-- 数据一致性：TestCase 仅通过 Version 获取 Project，TestExecution 仅通过 TestCase 获取 Version 和 Project，避免重复父级字段产生矛盾。
-- 历史可追溯：执行记录保存用例编号、标题、前置条件、步骤和预期结果快照；后续修改用例不会覆盖已有执行历史。
-- SQLite 外键约束：开发环境和 pytest 环境均启用 `PRAGMA foreign_keys=ON`，数据库会拒绝孤儿关联记录。
-- 删除保护：已有 Version 的 Project 不允许直接删除；已有 TestCase 的 Version 不允许直接删除；已有 TestExecution 的 TestCase 不允许直接删除，避免误删重要测试记录。
-- 模拟 Log 管理页面框架：列表页和占位按钮。
-- pytest：覆盖 Dashboard 聚合与筛选、Project / Version / TestCase / TestExecution / Defect CRUD、表单校验、快照、外键和关联删除保护。
+> 数据边界：仓库和页面只使用 mock / demo / sample 数据，不包含真实公司、项目、版本、测试用例、缺陷、Log、账号凭据或内部截图。
 
-## 技术栈
+## 质量状态
 
-- Python 3.12
-- Flask
-- Flask-SQLAlchemy
-- Flask-Migrate
-- Flask-Login
-- Bootstrap 5
-- Chart.js 4.4.7
-- SQLite
-- pytest
-- pytest-cov
-- Ruff
+| 检查项 | 当前结果 |
+| --- | --- |
+| Tests | 192 passed |
+| Coverage | 90.72% |
+| Coverage gate | 90% |
+| Ruff | passed |
+| GitHub Actions | passed |
+| Migration check | passed |
+| Python CI | 3.12 |
 
-## 目录结构
+## 业务流程
 
-```text
-audio-test-management-platform/
-├── app/
-│   ├── __init__.py
-│   ├── extensions.py
-│   ├── models.py
-│   ├── services/
-│   │   └── dashboard_service.py
-│   ├── blueprints/
-│   │   ├── auth/
-│   │   ├── dashboard/
-│   │   ├── projects/
-│   │   ├── versions/
-│   │   ├── testcases/
-│   │   ├── executions/
-│   │   ├── defects/
-│   │   └── logs/
-│   ├── templates/
-│   └── static/
-├── migrations/
-├── tests/
-├── config.py
-├── run.py
-├── requirements.txt
-├── README.md
-├── .env.example
-└── .gitignore
+### 手工测试闭环
+
+```mermaid
+flowchart LR
+    Project --> Version --> TestCase --> TestExecution --> Defect --> Dashboard
 ```
 
-## 目录和文件说明
+### 自动化结果导入
 
-- `app/__init__.py`：Flask 应用工厂，负责创建 app、初始化扩展、注册蓝图和 CLI 命令。
-- `app/extensions.py`：集中放置 `db`、`migrate`、`login_manager`，避免循环导入。
-- `app/models.py`：基础数据模型，包括 `User`、`Project`、`Version`、`TestCase`、`TestExecution`、`Defect`、`LogFile`。
-- `app/services/dashboard_service.py`：集中构建 Dashboard 查询范围、聚合执行与缺陷指标、生成趋势和版本质量数据。
-- `app/services/junit_xml_parser.py`：安全解析 pytest JUnit XML，输出与数据库无关的标准化结果。
-- `app/services/junit_import_service.py`：严格匹配目标 Version 下的 TestCase，并在单事务中创建 TestRun 与 TestExecution。
-- `app/blueprints/`：按业务模块拆分路由，便于后续逐步扩展 CRUD。
-- `app/templates/`：Jinja2 页面模板，包含基础布局、Dashboard、登录注册，以及 Project / Version / TestCase / TestExecution / Defect 页面。
-- `app/static/`：静态资源，目前包含基础 CSS。
-- `migrations/`：Flask-Migrate 迁移目录，后续数据库结构变更放在这里。
-- `tests/`：pytest 测试目录，覆盖首页访问、核心 CRUD、表单校验和删除保护。
-- `config.py`：项目配置，默认使用 SQLite，本地可通过 `.env` 覆盖。
-- `run.py`：本地启动入口。
-- `requirements.txt`：Python 依赖清单。
-- `.env.example`：本地环境变量模板。
-- `.gitignore`：忽略虚拟环境、数据库文件、缓存等本地文件。
+```mermaid
+flowchart LR
+    JUnitXML["JUnit XML"] --> Parser["JUnitXmlParserService<br/>(JUnitXmlParser)"]
+    Parser --> Import["JUnitImportService"]
+    Import --> TestRun
+    TestRun --> TestExecution
+```
 
-## 本地运行
+`JUnitXmlParserService` 是图中的架构角色；代码中的实际实现类名为 `JUnitXmlParser`。
 
-Windows PowerShell:
+## 数据模型
+
+```mermaid
+erDiagram
+    Project ||--o{ Version : contains
+    Version ||--o{ TestCase : defines
+    Version ||--o{ TestRun : records
+    TestCase ||--o{ TestExecution : produces
+    TestRun ||--o{ TestExecution : groups
+    TestExecution ||--o{ Defect : raises
+```
+
+模型通过现有外键建立关系：TestCase 只保存 `version_id`，TestExecution 只保存 `test_case_id` 和可选的 `test_run_id`，没有重复保存 Project 或 Version 外键。
+
+## 架构
+
+```mermaid
+flowchart LR
+    Routes["Web Routes"]
+
+    subgraph Services["Service Layer"]
+        Dashboard["DashboardService<br/>(dashboard_service.py)"]
+        Parser["JUnitXmlParserService<br/>(JUnitXmlParser)"]
+        Import["JUnitImportService"]
+    end
+
+    Models["SQLAlchemy Models"]
+    Database[(SQLite)]
+
+    Routes --> Dashboard
+    Routes --> Parser
+    Parser --> Import
+    Dashboard --> Models
+    Import --> Models
+    Models --> Database
+```
+
+- Parser 不依赖 Flask 和数据库，输入 bytes，输出标准化且不可变的解析结果；`defusedxml` 禁止 DTD、实体和外部引用。
+- Import Service 按目标 Version 严格匹配 TestCase code，以 SHA-256 报告摘要实现幂等，并在单事务中写入 TestRun 与 TestExecution；约束或数据库错误会触发整批回滚。
+- Dashboard Service 对数据库中的 Project、Version、TestExecution 和 Defect 做聚合，生成指标、趋势、版本质量和关注项。
+
+## 项目亮点
+
+- 测试项目、版本、用例、执行、缺陷形成完整闭环。
+- TestExecution 保存 TestCase 历史快照，Defect 保存失败执行快照，后续修改主数据不会覆盖历史内容。
+- SQLite 启用外键约束，并通过组合唯一约束保护 Version、TestCase、TestRun 和自动化执行记录。
+- Flask-Migrate 管理 upgrade / downgrade，CI 会从空数据库升级到 migration head 并执行模型漂移检查。
+- Defect 只能从 failed TestExecution 创建。
+- Dashboard 由数据库聚合结果驱动，不依赖硬编码统计值。
+- JUnit XML 使用安全解析和 XXE 防护，并限制文件大小、用例数量、嵌套深度和属性长度。
+- TestRun 记录一次自动化运行批次，并关联本批次导入的 TestExecution。
+- 导入前严格匹配目标 Version 下的 TestCase code，匹配失败时不写入部分数据。
+- 以 SHA-256 报告摘要识别重复导入。
+- TestRun 与 TestExecution 在单事务中写入，失败时整批 rollback。
+- 当前测试基线为 192 个 pytest，coverage 90.72%。
+- Ruff 和 GitHub Actions 检查依赖、编译、迁移、模型一致性、测试与 coverage 门槛。
+
+## 页面截图
+
+截图由本地 `init-db` 生成的 mock / demo / sample 数据和公开的 JUnit 示例文件产生。
+
+### Dashboard
+
+![Dashboard mock data](docs/images/dashboard.png)
+
+### JUnit XML 导入
+
+![JUnit import with demo data](docs/images/junit-import.png)
+
+### TestRun 详情
+
+![TestRun detail with sample results](docs/images/test-run-detail.png)
+
+### Defect 详情
+
+![Defect detail with mock snapshot](docs/images/defect-detail.png)
+
+## 快速启动
+
+以下命令以 Windows PowerShell 为例：
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\activate
-pip install -r requirements.txt
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements-dev.txt
+
 Copy-Item .env.example .env
+
 flask --app run.py db upgrade
 flask --app run.py init-db
-flask --app run.py run --debug
+flask --app run.py run
 ```
 
-访问地址：
+`.env.example` 使用本地 sample 配置：
+
+```dotenv
+FLASK_APP=run.py
+FLASK_DEBUG=1
+SECRET_KEY=sample-local-dev-secret-key
+DATABASE_URI=sqlite:///instance/audio_test_platform.sqlite
+```
+
+浏览器访问 `http://127.0.0.1:5000`。
+
+### 测试、Ruff 与 coverage
+
+```powershell
+python -m pytest
+python -m ruff check .
+python -m pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-fail-under=90
+```
+
+### 数据库迁移检查
+
+```powershell
+flask --app run.py db current
+flask --app run.py db check
+```
+
+## JUnit 演示流程
+
+演示文件：[`docs/samples/junit_demo_results.xml`](docs/samples/junit_demo_results.xml)。
+
+1. 执行 `flask --app run.py db upgrade` 和 `flask --app run.py init-db` 初始化 demo 数据。
+2. 启动应用，打开导航栏中的 Test Runs。
+3. 进入“导入 JUnit XML”，选择与示例用例编码匹配的 `Demo Firmware Alpha`。
+4. 上传 `docs/samples/junit_demo_results.xml`。
+5. 查看新建的 TestRun 及其 TestExecution 明细。
+6. 返回 Dashboard，确认执行统计和版本质量数据已更新。
+
+## 目录说明
 
 ```text
-http://127.0.0.1:5000
+app/
+├── blueprints/             # Web Routes
+├── services/
+│   ├── dashboard_service.py
+│   ├── junit_import_service.py
+│   └── junit_xml_parser.py
+├── templates/
+├── static/
+└── models.py
+docs/
+├── images/                 # 仅存放 mock/demo 页面截图
+└── samples/
+    └── junit_demo_results.xml
+migrations/                 # Flask-Migrate 迁移
+tests/                      # pytest 测试
 ```
 
-## 运行测试
-
-```powershell
-.\.venv\Scripts\python.exe -m pytest
-```
-
-## 代码质量与 CI
-
-安装本地开发和 CI 依赖：
-
-```powershell
-pip install -r requirements-dev.txt
-```
-
-运行 Ruff 基础代码检查：
-
-```powershell
-ruff check .
-```
-
-运行测试并生成终端缺失行报告和 `coverage.xml`：
-
-```powershell
-pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-fail-under=90
-```
-
-GitHub Actions 会在 push 和 Pull Request 时检查依赖、Python 编译、Ruff、空 SQLite 数据库迁移、模型迁移一致性、pytest 和 coverage 门槛。
-
-## 数据库说明
-
-当前已使用 Flask-Migrate 管理数据库结构。Project、Version、TestCase、TestExecution、Defect 已接入数据库 CRUD；`init-db` 仅用于插入本地 mock/demo/sample 示例数据。
-
-创建或更新本地 SQLite 表结构：
-
-```powershell
-flask --app run.py db upgrade
-```
-
-插入本地 mock/demo/sample 示例数据：
-
-```powershell
-flask --app run.py init-db
-```
-
-可公开展示的 JUnit XML 示例位于 `docs/samples/junit_demo_results.xml`，其中用例编码与 `init-db` 的 Demo Firmware Alpha 数据匹配。
-
-后续如果修改模型，可以使用 Flask-Migrate 生成迁移：
-
-```powershell
-flask --app run.py db migrate -m "describe model change"
-flask --app run.py db upgrade
-```
-
-如果本地 `instance/audio_test_platform.sqlite` 曾经由早期 `init-db` 或 `db.create_all()` 创建，可以删除该本地 demo 数据库后重新执行：
-
-```powershell
-flask --app run.py db upgrade
-flask --app run.py init-db
-```
-
-## 后续扩展建议
-
-- 为 Defect 增加受控状态流转和变更历史。
-- 为 Log 增加完整 CRUD。
-- 增加搜索、筛选、分页和导入导出。
-- 为缺陷和 Log 增加关联关系。
-- 增加角色权限，例如 tester、lead、viewer。
-- 增加更多 pytest 覆盖路由、模型和表单提交。
+技术栈：Python 3.12、Flask、Flask-SQLAlchemy、Flask-Migrate、SQLite、Bootstrap 5、Chart.js、pytest、pytest-cov、Ruff、GitHub Actions。

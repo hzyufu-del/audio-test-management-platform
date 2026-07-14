@@ -73,7 +73,9 @@
         <p class="eyebrow mb-1">optional ai assistant</p>
         <h2>AI 用例质量审查</h2>
       </div>
-      {% if not ai_enabled %}
+      {% if ai_config_error %}
+        <span class="badge text-bg-warning">AI 配置无效</span>
+      {% elif not ai_enabled %}
         <span class="badge text-bg-secondary">AI 未启用</span>
       {% elif review_error %}
         <span class="badge text-bg-danger">检查失败</span>
@@ -89,7 +91,11 @@
       审查结果不会自动修改或保存 TestCase，刷新页面后结果会消失。
     </p>
 
-    {% if not ai_enabled %}
+    {% if ai_config_error %}
+      <div class="alert alert-warning" role="status">
+        AI 配置无效，相关能力已安全禁用，平台其他功能不受影响。
+      </div>
+    {% elif not ai_enabled %}
       <div class="alert alert-secondary" role="status">
         AI 审查当前未启用。可在本地环境变量中显式开启，默认不会访问外部 AI 服务。
       </div>

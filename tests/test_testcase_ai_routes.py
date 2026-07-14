@@ -143,6 +143,50 @@ def test_disabled_ai_review_shows_friendly_message_without_provider_call(
     assert "AI 审查当前未启用" in page
 
 
+def test_invalid_runtime_ai_config_keeps_core_pages_available(
+    client,
+    app,
+    monkeypatch,
+):
+    import config
+    from app.services.ai.mock_provider import MockAIProvider
+
+    assert hasattr(config, "load_runtime_ai_config")
+    runtime_settings = config.load_runtime_ai_config(
+        {"AI_PROVIDER": "invalid-provider-sentinel"}
+    )
+    app.config.update(runtime_settings)
+
+    def forbidden_provider_call(self, context):
+        raise AssertionError(
+            "Provider must not be called after safe AI configuration fallback"
+        )
+
+    monkeypatch.setattr(
+        MockAIProvider,
+        "review_test_case",
+        forbidden_provider_call,
+    )
+    dashboard_response = client.get("/")
+    detail_response = client.get(
+        f"/test-cases/{app.config['TESTCASE_AI_TEST_ID']}"
+    )
+    review_response = client.post(
+        f"/test-cases/{app.config['TESTCASE_AI_TEST_ID']}/ai-review"
+    )
+    detail_page = detail_response.get_data(as_text=True)
+    review_page = review_response.get_data(as_text=True)
+
+    assert dashboard_response.status_code == 200
+    assert detail_response.status_code == 200
+    assert review_response.status_code == 200
+    assert "平台其他功能不受影响" in detail_page
+    assert "AI 检查用例" in detail_page
+    assert "disabled" in detail_page
+    assert "invalid-provider-sentinel" not in detail_page
+    assert "平台其他功能不受影响" in review_page
+
+
 def test_mock_provider_review_renders_score_rule_and_semantic_sections(
     client,
     app,

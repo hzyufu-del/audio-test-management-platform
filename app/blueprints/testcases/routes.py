@@ -137,6 +137,7 @@ def render_test_case_detail(test_case, review_result=None, review_error=None):
         review_error=review_error,
         ai_enabled=current_app.config.get("AI_ENABLED", False),
         ai_provider=current_app.config.get("AI_PROVIDER", "mock"),
+        ai_config_error=bool(current_app.config.get("AI_CONFIG_ERROR", "")),
     )
 
 

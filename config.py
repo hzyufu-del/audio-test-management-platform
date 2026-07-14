@@ -10,6 +10,19 @@ AI_PROVIDER_VALUES = frozenset({"mock", "deepseek"})
 TRUE_VALUES = frozenset({"true", "1", "yes", "on"})
 FALSE_VALUES = frozenset({"false", "0", "no", "off"})
 
+SAFE_AI_SETTINGS = {
+    "AI_ENABLED": False,
+    "AI_PROVIDER": "mock",
+    "DEEPSEEK_API_KEY": "",
+    "DEEPSEEK_MODEL": "",
+    "DEEPSEEK_BASE_URL": "https://api.deepseek.com",
+    "DEEPSEEK_THINKING_ENABLED": False,
+    "AI_REQUEST_TIMEOUT_SECONDS": 20,
+    "AI_MAX_INPUT_CHARS": 12000,
+    "AI_MAX_OUTPUT_TOKENS": 2000,
+    "AI_CONFIG_ERROR": "",
+}
+
 
 class AIConfigError(ValueError):
     """Raised when an AI environment setting cannot be validated safely."""
@@ -89,7 +102,14 @@ def load_ai_config(environ: Mapping[str, object] | None = None):
     }
 
 
-AI_SETTINGS = load_ai_config()
+def load_runtime_ai_config(environ: Mapping[str, object] | None = None):
+    try:
+        return {**load_ai_config(environ), "AI_CONFIG_ERROR": ""}
+    except AIConfigError as exc:
+        return {**SAFE_AI_SETTINGS, "AI_CONFIG_ERROR": str(exc)}
+
+
+AI_SETTINGS = load_runtime_ai_config()
 
 
 class Config:
@@ -108,3 +128,4 @@ class Config:
     AI_REQUEST_TIMEOUT_SECONDS = AI_SETTINGS["AI_REQUEST_TIMEOUT_SECONDS"]
     AI_MAX_INPUT_CHARS = AI_SETTINGS["AI_MAX_INPUT_CHARS"]
     AI_MAX_OUTPUT_TOKENS = AI_SETTINGS["AI_MAX_OUTPUT_TOKENS"]
+    AI_CONFIG_ERROR = AI_SETTINGS["AI_CONFIG_ERROR"]

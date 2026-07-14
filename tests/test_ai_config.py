@@ -1,3 +1,8 @@
+import os
+from pathlib import Path
+import subprocess
+import sys
+
 import pytest
 
 import config
@@ -5,6 +10,11 @@ import config
 
 def load_ai_config(values=None):
     return config.load_ai_config({} if values is None else values)
+
+
+def load_runtime_ai_config(values=None):
+    assert hasattr(config, "load_runtime_ai_config")
+    return config.load_runtime_ai_config({} if values is None else values)
 
 
 def test_ai_config_defaults_are_disabled_and_offline():
@@ -23,6 +33,99 @@ def test_ai_config_defaults_are_disabled_and_offline():
         "AI_MAX_INPUT_CHARS": 12000,
         "AI_MAX_OUTPUT_TOKENS": 2000,
     }
+
+
+def test_runtime_ai_config_returns_valid_strict_settings():
+    settings = load_runtime_ai_config(
+        {
+            "AI_ENABLED": "true",
+            "AI_PROVIDER": "deepseek",
+            "DEEPSEEK_MODEL": "demo-model",
+            "AI_REQUEST_TIMEOUT_SECONDS": "30",
+        }
+    )
+
+    assert settings["AI_ENABLED"] is True
+    assert settings["AI_PROVIDER"] == "deepseek"
+    assert settings["DEEPSEEK_MODEL"] == "demo-model"
+    assert settings["AI_REQUEST_TIMEOUT_SECONDS"] == 30
+    assert settings["AI_CONFIG_ERROR"] == ""
+
+
+@pytest.mark.parametrize(
+    ("values", "setting_name", "raw_value"),
+    [
+        (
+            {"AI_PROVIDER": "invalid-provider-sentinel"},
+            "AI_PROVIDER",
+            "invalid-provider-sentinel",
+        ),
+        (
+            {"AI_REQUEST_TIMEOUT_SECONDS": "invalid-timeout-sentinel"},
+            "AI_REQUEST_TIMEOUT_SECONDS",
+            "invalid-timeout-sentinel",
+        ),
+    ],
+)
+def test_runtime_ai_config_safely_disables_invalid_settings(
+    values,
+    setting_name,
+    raw_value,
+):
+    settings = load_runtime_ai_config(values)
+
+    assert settings["AI_ENABLED"] is False
+    assert settings["AI_PROVIDER"] == "mock"
+    assert settings["DEEPSEEK_API_KEY"] == ""
+    assert settings["DEEPSEEK_MODEL"] == ""
+    assert settings["DEEPSEEK_BASE_URL"] == "https://api.deepseek.com"
+    assert settings["DEEPSEEK_THINKING_ENABLED"] is False
+    assert settings["AI_REQUEST_TIMEOUT_SECONDS"] == 20
+    assert settings["AI_MAX_INPUT_CHARS"] == 12000
+    assert settings["AI_MAX_OUTPUT_TOKENS"] == 2000
+    assert setting_name in settings["AI_CONFIG_ERROR"]
+    assert raw_value not in settings["AI_CONFIG_ERROR"]
+    assert "DEEPSEEK_API_KEY" not in settings["AI_CONFIG_ERROR"]
+
+
+def test_invalid_ai_environment_does_not_block_flask_app_creation(tmp_path):
+    environment = {
+        name: value
+        for name, value in os.environ.items()
+        if not name.startswith(("AI_", "DEEPSEEK_"))
+    }
+    environment.update(
+        {
+            "AI_PROVIDER": "invalid-provider-sentinel",
+            "DATABASE_URI": (
+                f"sqlite:///{(tmp_path / 'runtime-config.sqlite').as_posix()}"
+            ),
+        }
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "from app import create_app; "
+                "app = create_app(); "
+                "assert app.config['AI_ENABLED'] is False; "
+                "assert app.config['AI_PROVIDER'] == 'mock'; "
+                "assert app.config['AI_CONFIG_ERROR']; "
+                "print('APP_CREATE_OK')"
+            ),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "APP_CREATE_OK"
+    assert "invalid-provider-sentinel" not in result.stdout
+    assert "invalid-provider-sentinel" not in result.stderr
 
 
 def test_deepseek_thinking_defaults_to_disabled():

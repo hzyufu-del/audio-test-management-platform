@@ -16,8 +16,8 @@
 
 | 检查项 | 当前结果 |
 | --- | --- |
-| Tests | 192 passed |
-| Coverage | 90.72% |
+| Tests | 297 passed |
+| Coverage | 92.48% |
 | Coverage gate | 90% |
 | Ruff | passed |
 | GitHub Actions | passed |
@@ -99,7 +99,7 @@ flowchart LR
 - 导入前严格匹配目标 Version 下的 TestCase code，匹配失败时不写入部分数据。
 - 以 SHA-256 报告摘要识别重复导入。
 - TestRun 与 TestExecution 在单事务中写入，失败时整批 rollback。
-- 当前测试基线为 192 个 pytest，coverage 90.72%。
+- 当前测试基线为 297 个 pytest，coverage 92.48%。
 - Ruff 和 GitHub Actions 检查依赖、编译、迁移、模型一致性、测试与 coverage 门槛。
 
 ## 页面截图
@@ -136,6 +136,7 @@ AI 用例质量审查是 TestCase 详情页上的可选旁路能力，只审查�
 - AI 结果不会写回数据库，刷新页面后消失；规则与 AI 结果不能替代需求确认、测试设计评审或人工判断。
 - API Key 只从本地环境变量加载，`.env.example` 保持空值；CI 不配置 Key，也不访问外部 AI 服务。
 - 所有演示内容仅使用 mock / demo / sample 数据。
+- 非法 AI 配置会安全禁用可选审查能力，不会阻止平台核心功能启动或访问。
 
 本地配置项见 [`.env.example`](.env.example)。启用 DeepSeek 前，应在被 Git 忽略的本地 `.env` 中设置 `AI_ENABLED`、`AI_PROVIDER`、`DEEPSEEK_API_KEY` 和 `DEEPSEEK_MODEL`，不要把 `.env` 或任何真实凭据提交到仓库。
 

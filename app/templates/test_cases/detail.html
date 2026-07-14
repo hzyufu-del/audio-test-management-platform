@@ -66,4 +66,153 @@
     </div>
     <p class="mb-0">{{ test_case.expected_result }}</p>
   </section>
+
+  <section class="panel ai-review-panel mt-3">
+    <div class="panel-header">
+      <div>
+        <p class="eyebrow mb-1">optional ai assistant</p>
+        <h2>AI 用例质量审查</h2>
+      </div>
+      {% if ai_config_error %}
+        <span class="badge text-bg-warning">AI 配置无效</span>
+      {% elif not ai_enabled %}
+        <span class="badge text-bg-secondary">AI 未启用</span>
+      {% elif review_error %}
+        <span class="badge text-bg-danger">检查失败</span>
+      {% elif review_result %}
+        <span class="badge text-bg-success">检查成功</span>
+      {% else %}
+        <span class="badge text-bg-secondary">等待检查</span>
+      {% endif %}
+    </div>
+
+    <p class="text-muted">
+      规则与 AI 审查结果仅用于辅助用例评审，不能替代需求确认、测试设计评审或人工判断。
+      审查结果不会自动修改或保存 TestCase，刷新页面后结果会消失。
+    </p>
+
+    {% if ai_config_error %}
+      <div class="alert alert-warning" role="status">
+        AI 配置无效，相关能力已安全禁用，平台其他功能不受影响。
+      </div>
+    {% elif not ai_enabled %}
+      <div class="alert alert-secondary" role="status">
+        AI 审查当前未启用。可在本地环境变量中显式开启，默认不会访问外部 AI 服务。
+      </div>
+    {% elif review_error %}
+      <div class="alert alert-danger" role="alert">
+        <strong>检查失败：</strong>{{ review_error }}
+      </div>
+    {% endif %}
+
+    <form action="{{ url_for('testcases.ai_review', test_case_id=test_case.id) }}" method="post">
+      <button class="btn btn-primary" type="submit" {% if not ai_enabled %}disabled{% endif %}>
+        AI 检查用例
+      </button>
+      <span class="text-muted ms-2">
+        当前配置：{{ "Demo Mock Provider" if ai_provider == "mock" else "DeepSeek Provider" }}
+      </span>
+    </form>
+
+    {% if review_result %}
+      <div class="ai-review-summary mt-4">
+        <div>
+          <span>启发式质量评分</span>
+          <strong>{{ review_result.quality_score }}</strong>
+          <small>0～100；不是正式评审结论</small>
+        </div>
+        <div>
+          <span>Provider</span>
+          <strong>
+            {{ "Demo AI Review" if review_result.is_demo else "DeepSeek AI Review" }}
+          </strong>
+          <small>{{ review_result.provider_name }}</small>
+        </div>
+        <div>
+          <span>置信度</span>
+          <strong>{{ review_result.semantic_review.confidence.value }}</strong>
+          <small>需由测试人员人工判断</small>
+        </div>
+      </div>
+
+      <div class="ai-review-grid mt-3">
+        <section class="ai-review-section">
+          <h3>规则检查问题</h3>
+          {% if review_result.rule_issues %}
+            <ul class="list-group list-group-flush">
+              {% for issue in review_result.rule_issues %}
+                <li class="list-group-item px-0">
+                  <div class="d-flex flex-wrap gap-2 mb-1">
+                    <span class="badge text-bg-secondary">{{ issue.category.value }}</span>
+                    <span class="badge text-bg-light">{{ issue.severity.value }}</span>
+                  </div>
+                  <strong class="d-block ai-review-text">{{ issue.description }}</strong>
+                  <span class="d-block ai-review-text text-muted">证据：{{ issue.evidence }}</span>
+                  <span class="d-block ai-review-text">建议：{{ issue.suggestion }}</span>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="text-muted mb-0">未发现确定性规则问题。</p>
+          {% endif %}
+        </section>
+
+        <section class="ai-review-section">
+          <h3>AI 语义问题</h3>
+          <p class="ai-review-text">{{ review_result.semantic_review.summary }}</p>
+          {% if review_result.semantic_review.issues %}
+            <ul class="list-group list-group-flush">
+              {% for issue in review_result.semantic_review.issues %}
+                <li class="list-group-item px-0">
+                  <div class="d-flex flex-wrap gap-2 mb-1">
+                    <span class="badge text-bg-secondary">{{ issue.category.value }}</span>
+                    <span class="badge text-bg-light">{{ issue.severity.value }}</span>
+                  </div>
+                  <strong class="d-block ai-review-text">{{ issue.description }}</strong>
+                  <span class="d-block ai-review-text text-muted">证据：{{ issue.evidence }}</span>
+                  <span class="d-block ai-review-text">建议：{{ issue.suggestion }}</span>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="text-muted mb-0">未发现额外的语义问题。</p>
+          {% endif %}
+        </section>
+      </div>
+
+      <div class="ai-review-grid mt-3">
+        {% set review_lists = [
+          ("缺失前置条件", review_result.semantic_review.missing_preconditions),
+          ("模糊预期", review_result.semantic_review.ambiguous_expectations),
+          ("缺失测试场景", review_result.semantic_review.missing_test_scenarios),
+          ("重写建议", review_result.semantic_review.rewrite_suggestions),
+          ("局限性", review_result.semantic_review.limitations)
+        ] %}
+        {% for heading, items in review_lists %}
+          <section class="ai-review-section">
+            <h3>{{ heading }}</h3>
+            {% if items %}
+              <ul class="mb-0">
+                {% for item in items %}
+                  <li class="ai-review-text">{{ item }}</li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <p class="text-muted mb-0">无。</p>
+            {% endif %}
+          </section>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </section>
+
+  {% if review_result or review_error %}
+    <script>
+      window.history.replaceState(
+        null,
+        "",
+        {{ url_for("testcases.detail", test_case_id=test_case.id) | tojson }}
+      );
+    </script>
+  {% endif %}
 {% endblock %}

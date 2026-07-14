@@ -1,8 +1,18 @@
-from flask import Blueprint, flash, redirect, render_template, request, url_for
+from flask import (
+    Blueprint,
+    current_app,
+    flash,
+    redirect,
+    render_template,
+    request,
+    url_for,
+)
 from sqlalchemy.exc import IntegrityError
 
 from app.extensions import db
 from app.models import TestCase, Version
+from app.services.ai.exceptions import AIReviewError
+from app.services.testcase_ai_service import TestCaseAIService
 
 
 bp = Blueprint("testcases", __name__, url_prefix="/test-cases")
@@ -45,7 +55,19 @@ def create():
 @bp.get("/<int:test_case_id>")
 def detail(test_case_id):
     test_case = db.get_or_404(TestCase, test_case_id)
-    return render_template("test_cases/detail.html", test_case=test_case)
+    return render_test_case_detail(test_case)
+
+
+@bp.post("/<int:test_case_id>/ai-review")
+def ai_review(test_case_id):
+    test_case = db.get_or_404(TestCase, test_case_id)
+    try:
+        review_result = TestCaseAIService(
+            current_app.config
+        ).review_test_case(test_case)
+    except AIReviewError as exc:
+        return render_test_case_detail(test_case, review_error=str(exc))
+    return render_test_case_detail(test_case, review_result=review_result)
 
 
 @bp.route("/<int:test_case_id>/edit", methods=["GET", "POST"])
@@ -104,6 +126,18 @@ def render_template_test_case_form(page_title, test_case, form_data, errors):
         test_case=test_case,
         versions=versions,
         page_title=page_title,
+    )
+
+
+def render_test_case_detail(test_case, review_result=None, review_error=None):
+    return render_template(
+        "test_cases/detail.html",
+        test_case=test_case,
+        review_result=review_result,
+        review_error=review_error,
+        ai_enabled=current_app.config.get("AI_ENABLED", False),
+        ai_provider=current_app.config.get("AI_PROVIDER", "mock"),
+        ai_config_error=bool(current_app.config.get("AI_CONFIG_ERROR", "")),
     )
 
 

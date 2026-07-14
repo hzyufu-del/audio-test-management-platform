@@ -248,6 +248,8 @@ def seed_demo_data():
         "Sample Charging Status Checklist",
         "Charging",
     )
+    bluetooth_testcase.precondition = ""
+    charging_testcase.expected_result = "显示正常"
 
     failed_execution = ensure_execution(
         testcase,

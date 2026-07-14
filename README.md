@@ -16,8 +16,8 @@
 
 | 检查项 | 当前结果 |
 | --- | --- |
-| Tests | 192 passed |
-| Coverage | 90.72% |
+| Tests | 297 passed |
+| Coverage | 92.48% |
 | Coverage gate | 90% |
 | Ruff | passed |
 | GitHub Actions | passed |
@@ -99,7 +99,7 @@ flowchart LR
 - 导入前严格匹配目标 Version 下的 TestCase code，匹配失败时不写入部分数据。
 - 以 SHA-256 报告摘要识别重复导入。
 - TestRun 与 TestExecution 在单事务中写入，失败时整批 rollback。
-- 当前测试基线为 192 个 pytest，coverage 90.72%。
+- 当前测试基线为 297 个 pytest，coverage 92.48%。
 - Ruff 和 GitHub Actions 检查依赖、编译、迁移、模型一致性、测试与 coverage 门槛。
 
 ## 页面截图
@@ -121,6 +121,24 @@ flowchart LR
 ### Defect 详情
 
 ![Defect detail with mock snapshot](docs/images/defect-detail.png)
+
+## Optional AI TestCase Review Assistant
+
+AI 用例质量审查是 TestCase 详情页上的可选旁路能力，只审查已有用例，不生成、修改或自动保存测试用例。处理顺序为：确定性规则检查、可插拔语义审查、Pydantic v2 严格结构校验、启发式评分和页面展示。
+
+- 默认 `AI_ENABLED=false`，不会调用任何 AI Provider。
+- 默认 Provider 为完全离线且确定性的 `mock`，页面标记为 Demo AI Review。
+- 可选 Provider 为 `deepseek`，使用 OpenAI-compatible API；模型名称必须通过本地环境变量配置，业务代码不写死模型。
+- `DEEPSEEK_THINKING_ENABLED=false` 默认关闭 Thinking Mode，以适配低延迟、严格 JSON 结构的 TestCase 审查；需要时可通过本地配置显式启用。
+- Provider 只接收 TestCase、Version 和 Project 的字段白名单，不接收数据库 ID、用户数据、凭据、日志、JUnit 原文或本地路径。
+- DeepSeek JSON 输出仍需通过 Pydantic 严格校验；额外字段、非法 JSON 和不完整 Schema 会被拒绝。
+- TestCase 文本始终被视为待分析数据，不能改变 System Prompt、输出 Schema 或应用评分。
+- AI 结果不会写回数据库，刷新页面后消失；规则与 AI 结果不能替代需求确认、测试设计评审或人工判断。
+- API Key 只从本地环境变量加载，`.env.example` 保持空值；CI 不配置 Key，也不访问外部 AI 服务。
+- 所有演示内容仅使用 mock / demo / sample 数据。
+- 非法 AI 配置会安全禁用可选审查能力，不会阻止平台核心功能启动或访问。
+
+本地配置项见 [`.env.example`](.env.example)。启用 DeepSeek 前，应在被 Git 忽略的本地 `.env` 中设置 `AI_ENABLED`、`AI_PROVIDER`、`DEEPSEEK_API_KEY` 和 `DEEPSEEK_MODEL`，不要把 `.env` 或任何真实凭据提交到仓库。
 
 ## 快速启动
 

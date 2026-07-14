@@ -90,3 +90,16 @@ def test_init_db_seeds_demo_data_when_schema_exists(tmp_path):
             item.result == "failed" and not item.defects
             for item in ExecutionRecord.query.all()
         )
+        complete_case = ChecklistTestCase.query.filter_by(
+            code="TC_AUDIO_001"
+        ).one()
+        missing_precondition_case = ChecklistTestCase.query.filter_by(
+            code="TC_BT_001"
+        ).one()
+        vague_expectation_case = ChecklistTestCase.query.filter_by(
+            code="TC_CHARGING_001"
+        ).one()
+        assert complete_case.precondition
+        assert complete_case.expected_result != "显示正常"
+        assert missing_precondition_case.precondition == ""
+        assert vague_expectation_case.expected_result == "显示正常"

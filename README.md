@@ -16,11 +16,11 @@
 
 | 检查项 | 当前结果 |
 | --- | --- |
-| Tests (local) | 502 passed |
+| Tests (local) | 506 passed |
 | Coverage (local) | 93.84% |
 | Coverage gate | 90% |
 | Ruff (local) | passed |
-| GitHub Actions | not run for this local branch |
+| GitHub Actions | Python 3.12 quality checks passed; Docker not included |
 | Migration check (local) | passed |
 | Python CI | 3.12 |
 
@@ -166,7 +166,7 @@ flowchart LR
 - TestRun 与 TestExecution 在单事务中写入，失败时整批 rollback。
 - Log Analysis V1 不保存上传文件，以 SHA-256、确定性统计和有上限的安全摘要支持复核。
 - REST API V1 提供严格分页、筛选、状态码、Location、快照和安全回滚测试，不实现不完整的 JWT 或 RBAC。
-- 当前本地测试基线为 502 个 pytest，coverage 93.84%。
+- 当前本地测试基线为 506 个 pytest，coverage 93.84%。
 - Ruff 和 GitHub Actions 检查依赖、编译、迁移、模型一致性、测试与 coverage 门槛。
 
 ## 页面截图
@@ -223,14 +223,16 @@ flask --app run.py init-db
 flask --app run.py run
 ```
 
-`.env.example` 使用本地 sample 配置：
+`.env.example` 使用本地 demo 配置：
 
 ```dotenv
 FLASK_APP=run.py
 FLASK_DEBUG=1
-SECRET_KEY=sample-local-dev-secret-key
+SECRET_KEY=replace-with-local-secret
 DATABASE_URI=sqlite:///instance/audio_test_platform.sqlite
 ```
+
+`SECRET_KEY` 只是本地占位值，复制为 `.env` 后应替换；不要用于公网或生产环境。
 
 浏览器访问 `http://127.0.0.1:5000`。
 
@@ -242,6 +244,8 @@ Docker 配置面向本地 demo 和作品展示。首次运行：
 Copy-Item .env.example .env
 docker compose up --build
 ```
+
+Compose 默认将服务绑定到 `127.0.0.1:5000`，只允许本机访问。
 
 启动入口会先执行 migration upgrade，再根据 `SEED_DEMO_DATA` 决定是否初始化 demo 数据。`.env.example` 默认设置为 `true`，现有 `init-db` 可以重复执行，不会重复插入同一批 seed 记录。
 
@@ -278,7 +282,9 @@ python scripts/api_smoke.py
 Windows PowerShell 版本：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/api_smoke.ps1
+powershell -ExecutionPolicy Bypass -File scripts/api_smoke.ps1 `
+  -BaseUrl http://127.0.0.1:5000 `
+  -TimeoutSec 15
 ```
 
 Python 脚本支持自定义地址和超时：
@@ -287,7 +293,7 @@ Python 脚本支持自定义地址和超时：
 python scripts/api_smoke.py --base-url http://127.0.0.1:5000 --timeout 5
 ```
 
-两个脚本每次生成唯一的 mock code，不直接访问数据库。任一步失败都会返回非零退出码，并隐藏 traceback、数据库路径和敏感配置。
+两个脚本每次生成唯一的 mock code，不直接访问数据库。PowerShell 脚本会读取真实 HTTP 状态码，验证 GET/PATCH 的 200、创建请求的 201、错误示例的 415/422/409，并检查创建响应的 `Location` Header。任一步失败都会返回非零退出码，并隐藏 traceback、数据库路径和敏感配置。
 
 ## Postman
 
@@ -335,7 +341,23 @@ python -m pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-fail
 
 REST API V1 的 pytest 覆盖 health、统一错误、分页、筛选、创建、快照、状态冲突和数据库 rollback。接口文档见 [`docs/api/rest_api_v1.md`](docs/api/rest_api_v1.md)。
 
-交付资产测试会解析 `compose.yaml` 和 Postman JSON，并覆盖 Python smoke 的正常闭环、服务不可用、非 JSON 响应、超时和 409 错误。PowerShell smoke 还会执行 AST 语法检查和真实容器 smoke。
+#### pytest 自动验证
+
+- Dockerfile、Compose 回环地址绑定、entrypoint 和 `.dockerignore` 静态规则
+- Postman JSON 结构和敏感字段边界
+- Python smoke 的模拟 HTTP 正常闭环、服务不可用、非 JSON、超时和 409
+- PowerShell smoke 的真实状态码、超时、错误状态和 `Location` 检查逻辑
+- 本机存在 PowerShell 时，自动执行 AST 解析及本地 HTTP stub 闭环
+
+#### 本地人工实际验证
+
+- `docker compose build`、`docker compose up` 和 healthcheck
+- 容器非 root 用户及 `127.0.0.1:5000` HostIp
+- Python 与 PowerShell 真实 HTTP smoke
+- 服务不可用时 PowerShell 的超时和非零退出
+- 验收后的 `docker compose down -v`
+
+PR 的 GitHub Actions 在 Python 3.12 环境检查依赖、编译、Ruff、迁移、pytest 和 coverage；当前工作流不执行 Docker build。
 
 ### 数据库迁移检查
 

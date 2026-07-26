@@ -1,6 +1,9 @@
 import importlib.util
 import io
 import json
+import re
+import shutil
+import subprocess
 import threading
 import time
 from contextlib import contextmanager, suppress
@@ -10,6 +13,7 @@ from urllib.error import URLError
 from urllib.parse import urlsplit
 
 import yaml
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,6 +32,39 @@ def load_smoke_module():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def find_powershell():
+    for executable in ("powershell.exe", "powershell", "pwsh.exe", "pwsh"):
+        resolved = shutil.which(executable)
+        if resolved:
+            return resolved
+    return None
+
+
+def run_powershell_smoke(base_url, timeout_sec=2):
+    executable = find_powershell()
+    if executable is None:
+        pytest.skip("PowerShell is not available")
+
+    return subprocess.run(
+        [
+            executable,
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(ROOT / "scripts" / "api_smoke.ps1"),
+            "-BaseUrl",
+            base_url,
+            "-TimeoutSec",
+            str(timeout_sec),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=max(timeout_sec + 10, 15),
+        check=False,
+    )
 
 
 def test_runtime_and_development_dependencies_are_separated():
@@ -70,7 +107,9 @@ def test_compose_configures_persistent_demo_service_and_healthcheck():
     healthcheck = " ".join(web["healthcheck"]["test"])
 
     assert web["build"]["context"] == "."
-    assert web["ports"] == ["5000:5000"]
+    assert web["ports"] == ["127.0.0.1:5000:5000"]
+    assert "5000:5000" not in web["ports"]
+    assert "0.0.0.0:5000:5000" not in web["ports"]
     assert environment["AI_ENABLED"] == "false"
     assert environment["AI_PROVIDER"] == "mock"
     assert environment["DATABASE_URI"] == (
@@ -209,7 +248,17 @@ def test_powershell_smoke_script_exposes_demo_only_http_workflow():
     content = read_text("scripts/api_smoke.ps1")
 
     assert '[string]$BaseUrl = "http://127.0.0.1:5000"' in content
-    assert "Invoke-RestMethod" in content
+    assert "[int]$TimeoutSec = 15" in content
+    assert "Invoke-WebRequest" in content
+    assert "Invoke-RestMethod" not in content
+    assert re.search(r"\[int\]\$response\.StatusCode", content)
+    assert re.search(r"\$actualStatus\s+-ne\s+\$ExpectedStatus", content)
+    assert "TimeoutSec = $TimeoutSec" in content
+    assert content.count("-ExpectedStatus 201") == 3
+    assert "-ExpectedStatus 415" in content
+    assert "-ExpectedStatus 422" in content
+    assert "-ExpectedStatus 409" in content
+    assert "-RequireLocation" in content
     assert "Get-Random" in content
     assert '$apiUrl = "$rootUrl/api/v1"' in content
     assert '"$apiUrl/health"' in content
@@ -238,6 +287,12 @@ def test_readme_delivery_commands_match_repository_assets():
     assert "http://127.0.0.1:5000/api/v1/health" in readme
     assert "当前 API 没有生产级认证" in readme
     assert "默认关闭外部 AI Provider" in readme
+    assert "Compose 默认将服务绑定到 `127.0.0.1:5000`" in readme
+    assert "pytest 自动验证" in readme
+    assert "本地人工实际验证" in readme
+    assert "当前工作流不执行 Docker build" in readme
+    assert "SECRET_KEY=replace-with-local-secret" in readme
+    assert "SECRET_KEY=sample-local-dev-secret-key" not in readme
 
 
 class QuietThreadingHTTPServer(ThreadingHTTPServer):
@@ -248,6 +303,7 @@ class QuietThreadingHTTPServer(ThreadingHTTPServer):
 @contextmanager
 def demo_api_server(scenario="success"):
     requests = []
+    created_test_case_codes = set()
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, format_, *args):
@@ -345,8 +401,38 @@ def demo_api_server(scenario="success"):
         def do_POST(self):
             path = urlsplit(self.path).path
             requests.append(("POST", path))
+            if (
+                path == "/api/v1/test-cases"
+                and self.headers.get_content_type() != "application/json"
+            ):
+                length = int(self.headers.get("Content-Length", "0"))
+                self.rfile.read(length)
+                self.send_json(
+                    415,
+                    {
+                        "error": {
+                            "code": "unsupported_media_type",
+                            "message": "请求必须使用 application/json。",
+                            "details": {},
+                        }
+                    },
+                )
+                return
+
             payload = self.read_json()
             if path == "/api/v1/test-cases":
+                if not payload:
+                    self.send_json(
+                        422,
+                        {
+                            "error": {
+                                "code": "validation_error",
+                                "message": "请求参数校验失败。",
+                                "details": {},
+                            }
+                        },
+                    )
+                    return
                 if scenario == "conflict":
                     self.send_json(
                         409,
@@ -359,14 +445,31 @@ def demo_api_server(scenario="success"):
                         },
                     )
                     return
+                if payload["code"] in created_test_case_codes:
+                    self.send_json(
+                        409,
+                        {
+                            "error": {
+                                "code": "conflict",
+                                "message": "示例资源冲突。",
+                                "details": {},
+                            }
+                        },
+                    )
+                    return
+                created_test_case_codes.add(payload["code"])
                 self.send_json(
-                    201,
+                    200 if scenario == "wrong_create_status" else 201,
                     {
                         "id": 101,
                         "version_id": payload["version_id"],
                         "code": payload["code"],
                     },
-                    {"Location": "/api/v1/test-cases/101"},
+                    (
+                        {}
+                        if scenario == "missing_location"
+                        else {"Location": "/api/v1/test-cases/101"}
+                    ),
                 )
                 return
             if path == "/api/v1/executions":
@@ -450,6 +553,70 @@ def test_python_smoke_runs_complete_http_only_workflow():
     assert ("PATCH", "/api/v1/defects/303") in requests
     assert output.getvalue().count("[200]") >= 5
     assert output.getvalue().count("[201]") == 3
+
+
+def test_powershell_smoke_runs_complete_http_workflow_when_available():
+    with demo_api_server() as (base_url, requests):
+        result = run_powershell_smoke(base_url)
+
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, output
+    assert output.count("[201]") == 3
+    assert "[415]" in output
+    assert "[422]" in output
+    assert "[409]" in output
+    assert ("POST", "/api/v1/test-cases") in requests
+    assert ("POST", "/api/v1/executions") in requests
+    assert ("POST", "/api/v1/defects") in requests
+    assert ("PATCH", "/api/v1/defects/303") in requests
+
+
+def test_powershell_smoke_rejects_wrong_success_status_when_available():
+    with demo_api_server("wrong_create_status") as (base_url, _):
+        result = run_powershell_smoke(base_url)
+
+    output = result.stdout + result.stderr
+    assert result.returncode == 1
+    assert "expected status 201 but received 200" in output
+    assert "workflow passed" not in output
+    assert "stack trace" not in output.lower()
+    assert "CategoryInfo" not in output
+    assert "FullyQualifiedErrorId" not in output
+    assert not re.search(r"api_smoke\.ps1:\d+ char:", output)
+
+
+def test_powershell_smoke_rejects_missing_location_when_available():
+    with demo_api_server("missing_location") as (base_url, _):
+        result = run_powershell_smoke(base_url)
+
+    output = result.stdout + result.stderr
+    assert result.returncode == 1
+    assert "returned status 201 without Location" in output
+    assert "workflow passed" not in output
+
+
+def test_powershell_smoke_ast_parses_when_available():
+    executable = find_powershell()
+    if executable is None:
+        pytest.skip("PowerShell is not available")
+
+    script_path = str(ROOT / "scripts" / "api_smoke.ps1").replace("'", "''")
+    command = (
+        "$tokens = $null; $errors = $null; "
+        "[System.Management.Automation.Language.Parser]::ParseFile("
+        f"'{script_path}', [ref]$tokens, [ref]$errors) | Out-Null; "
+        "if ($errors.Count -gt 0) { "
+        "$errors | ForEach-Object { Write-Error $_.Message }; exit 1 }"
+    )
+    result = subprocess.run(
+        [executable, "-NoProfile", "-Command", command],
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_python_smoke_reports_unavailable_service_without_traceback(

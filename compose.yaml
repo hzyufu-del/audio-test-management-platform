@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "5000:5000"
+      - "127.0.0.1:5000:5000"
     environment:
       SECRET_KEY: "${SECRET_KEY:-replace-with-local-secret}"
       DATABASE_URI: "sqlite:////app/instance/audio_test_platform.sqlite"

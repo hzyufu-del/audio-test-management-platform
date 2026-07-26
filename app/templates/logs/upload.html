@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block title %}Upload Log - Audio Test Platform{% endblock %}
+
+{% block content %}
+  <section class="page-heading">
+    <div>
+      <p class="eyebrow">bounded text upload</p>
+      <h1>上传并分析 Log</h1>
+      <p class="text-muted mb-0">
+        支持 .log/.txt、UTF-8、最大 2 MiB、20,000 行、单行 8,192 字符。
+      </p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{{ url_for('logs.index') }}">返回列表</a>
+  </section>
+
+  <section class="panel">
+    <form method="post" enctype="multipart/form-data" class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label" for="project_id">Project</label>
+        <select class="form-select" id="project_id" name="project_id" required>
+          <option value="">请选择 Project</option>
+          {% for project in projects %}
+            <option value="{{ project.id }}" {% if selected_project_id|string == project.id|string %}selected{% endif %}>
+              {{ project.name }} ({{ project.code }})
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="version_id">Version（可选）</label>
+        <select class="form-select" id="version_id" name="version_id">
+          <option value="">不关联 Version</option>
+          {% for version in versions %}
+            <option
+              value="{{ version.id }}"
+              data-project-id="{{ version.project_id }}"
+              {% if selected_version_id|string == version.id|string %}selected{% endif %}
+            >
+              {{ version.project.name }} / {{ version.name }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12">
+        <label class="form-label" for="log_file">日志文件</label>
+        <input class="form-control" id="log_file" name="log_file" type="file" accept=".log,.txt" required>
+      </div>
+      <div class="col-12">
+        <label class="form-label" for="notes">备注（可选）</label>
+        <textarea class="form-control" id="notes" name="notes" rows="3">{{ notes }}</textarea>
+      </div>
+      <div class="col-12">
+        <div class="alert alert-info mb-0" role="note">
+          <strong>Privacy boundary:</strong>
+          Original log content is never stored. Only metadata and a bounded
+          analysis summary are persisted.
+        </div>
+      </div>
+      <div class="col-12 d-flex gap-2">
+        <button class="btn btn-primary" type="submit">开始确定性分析</button>
+        <a class="btn btn-outline-secondary" href="{{ url_for('logs.index') }}">取消</a>
+      </div>
+    </form>
+  </section>
+{% endblock %}

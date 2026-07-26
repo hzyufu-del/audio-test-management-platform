@@ -263,13 +263,33 @@ class Defect(db.Model):
 
 
 class LogFile(db.Model):
+    __table_args__ = (
+        db.UniqueConstraint(
+            "project_id",
+            "sha256",
+            name="uq_log_file_project_sha256",
+        ),
+    )
+
     id = db.Column(db.Integer, primary_key=True)
     project_id = db.Column(db.Integer, db.ForeignKey("project.id"), nullable=False)
     version_id = db.Column(db.Integer, db.ForeignKey("version.id"))
     filename = db.Column(db.String(200), nullable=False)
-    category = db.Column(db.String(60), default="sample", nullable=False)
-    storage_path = db.Column(db.String(255))
-    uploaded_by = db.Column(db.String(80))
+    file_size_bytes = db.Column(db.Integer, nullable=False)
+    sha256 = db.Column(db.String(64), nullable=False)
+    analysis_status = db.Column(
+        db.String(30),
+        default="completed",
+        nullable=False,
+    )
+    risk_level = db.Column(db.String(20), nullable=False)
+    total_lines = db.Column(db.Integer, nullable=False)
+    critical_count = db.Column(db.Integer, default=0, nullable=False)
+    error_count = db.Column(db.Integer, default=0, nullable=False)
+    warning_count = db.Column(db.Integer, default=0, nullable=False)
+    info_count = db.Column(db.Integer, default=0, nullable=False)
+    analysis_summary = db.Column(db.Text, nullable=False)
+    uploaded_by = db.Column(db.String(80), nullable=False)
     notes = db.Column(db.Text)
     uploaded_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
 

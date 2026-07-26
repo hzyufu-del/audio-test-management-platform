@@ -344,21 +344,47 @@ def seed_demo_data():
         "P3",
     )
 
+    from .services.log_analysis_service import LogTextParser
+
+    demo_log_content = (
+        b"2026-07-26 INFO mock audio connection established\n"
+        b"2026-07-26 WARNING demo battery voltage is low\n"
+        b"2026-07-26 ERROR sample audio protocol timeout"
+    )
+    log_analysis = LogTextParser().analyze(
+        "sample_audio_check.log",
+        demo_log_content,
+    )
     log_file = LogFile.query.filter_by(
         project_id=project.id,
-        filename="sample_audio_check.log",
+        sha256=log_analysis.sha256,
     ).first()
     if log_file is None:
-        log_file = LogFile(
+        log_file = LogFile.query.filter_by(
             project_id=project.id,
-            version_id=version.id,
-            filename="sample_audio_check.log",
-            category="sample",
-            storage_path="mock/logs/sample_audio_check.log",
-            uploaded_by="demo_tester",
-            notes="Mock log metadata only.",
-        )
+            filename=log_analysis.filename,
+        ).first()
+    if log_file is None:
+        log_file = LogFile(project_id=project.id)
         db.session.add(log_file)
+
+    log_file.version_id = version.id
+    log_file.filename = log_analysis.filename
+    log_file.file_size_bytes = log_analysis.file_size_bytes
+    log_file.sha256 = log_analysis.sha256
+    log_file.analysis_status = "completed"
+    log_file.risk_level = log_analysis.risk_level
+    log_file.total_lines = log_analysis.total_lines
+    log_file.critical_count = log_analysis.level_counts["critical"]
+    log_file.error_count = log_analysis.level_counts["error"]
+    log_file.warning_count = log_analysis.level_counts["warning"]
+    log_file.info_count = log_analysis.level_counts["info"]
+    log_file.analysis_summary = log_analysis.summary_json
+    log_file.uploaded_by = "demo_tester"
+    log_file.notes = (
+        "Mock/demo/sample analysis metadata only; original log content "
+        "is not stored."
+    )
 
     db.session.commit()
 

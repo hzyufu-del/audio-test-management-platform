@@ -33,6 +33,7 @@ def create_app(config_overrides=None):
 
 
 def register_blueprints(app):
+    from .blueprints.api_v1 import bp as api_v1_bp
     from .blueprints.auth import bp as auth_bp
     from .blueprints.dashboard import bp as dashboard_bp
     from .blueprints.defects import bp as defects_bp
@@ -44,6 +45,7 @@ def register_blueprints(app):
     from .blueprints.versions import bp as versions_bp
 
     app.register_blueprint(dashboard_bp)
+    app.register_blueprint(api_v1_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(projects_bp)
     app.register_blueprint(versions_bp)

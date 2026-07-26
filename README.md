@@ -8,7 +8,7 @@
 
 ## 项目定位
 
-项目根据测试流程进行抽象，覆盖 Project、Version、TestCase、TestExecution、Defect、TestRun 和 Dashboard。它用于求职作品展示，不是任何公司内部系统的复刻。
+项目根据测试流程进行抽象，覆盖 Project、Version、TestCase、TestExecution、Defect、TestRun、Log Analysis、REST API V1 和 Dashboard。它用于求职作品展示，不是任何公司内部系统的复刻。
 
 > 数据边界：仓库和页面只使用 mock / demo / sample 数据，不包含真实公司、项目、版本、测试用例、缺陷、Log、账号凭据或内部截图。
 
@@ -16,8 +16,8 @@
 
 | 检查项 | 当前结果 |
 | --- | --- |
-| Tests (local) | 345 passed |
-| Coverage (local) | 92.94% |
+| Tests (local) | 488 passed |
+| Coverage (local) | 93.84% |
 | Coverage gate | 90% |
 | Ruff (local) | passed |
 | GitHub Actions | not run for this local branch |
@@ -44,6 +44,26 @@ flowchart LR
 ```
 
 `JUnitXmlParserService` 是图中的架构角色；代码中的实际实现类名为 `JUnitXmlParser`。
+
+### REST API V1
+
+```mermaid
+flowchart LR
+    Client["JSON Client"] --> API["/api/v1"]
+    API --> TestCaseService
+    TestCaseService --> TestCase
+    API --> ExecutionService
+    ExecutionService --> TestExecution
+    API --> DefectService
+    DefectService --> Defect
+    TestCase --> TestExecution --> Defect
+```
+
+- 提供 health、TestCase、TestExecution 和 Defect 的 JSON 查询/写入接口。
+- POST / PATCH 只接受 `application/json`，通过 Pydantic v2 拒绝未知字段和 Mass Assignment。
+- 统一返回 400 / 404 / 409 / 415 / 422 / 500 错误结构，不暴露 traceback、SQL 或数据库路径。
+- 手工 Execution 和 Defect 复用现有快照 helper；数据库写入失败会 rollback。
+- 完整接口、curl 和 PowerShell 示例见 [`docs/api/rest_api_v1.md`](docs/api/rest_api_v1.md)。
 
 ### Log Analysis V1
 
@@ -100,13 +120,14 @@ erDiagram
 
 ```mermaid
 flowchart LR
-    Routes["Web Routes"]
+    Routes["Web Routes / REST API V1"]
 
     subgraph Services["Service Layer"]
         Dashboard["DashboardService<br/>(dashboard_service.py)"]
         Parser["JUnitXmlParserService<br/>(JUnitXmlParser)"]
         Import["JUnitImportService"]
         LogParser["LogTextParser"]
+        Workflow["TestCase / Execution / Defect Services"]
     end
 
     Models["SQLAlchemy Models"]
@@ -115,10 +136,12 @@ flowchart LR
     Routes --> Dashboard
     Routes --> Parser
     Routes --> LogParser
+    Routes --> Workflow
     Routes --> Models
     Parser --> Import
     Dashboard --> Models
     Import --> Models
+    Workflow --> Models
     Models --> Database
 ```
 
@@ -126,6 +149,7 @@ flowchart LR
 - Import Service 按目标 Version 严格匹配 TestCase code，以 SHA-256 报告摘要实现幂等，并在单事务中写入 TestRun 与 TestExecution；约束或数据库错误会触发整批回滚。
 - Dashboard Service 对数据库中的 Project、Version、TestExecution 和 Defect 做聚合，生成指标、趋势、版本质量和关注项。
 - LogTextParser 执行同步、有边界、可重复的纯文本分析；路由只负责 Project / Version 校验和数据库事务。
+- REST API 路由负责 HTTP/JSON 边界，Pydantic Schema 负责字段校验，Workflow Service 负责查询、业务约束和事务。
 
 ## 项目亮点
 
@@ -141,7 +165,8 @@ flowchart LR
 - 以 SHA-256 报告摘要识别重复导入。
 - TestRun 与 TestExecution 在单事务中写入，失败时整批 rollback。
 - Log Analysis V1 不保存上传文件，以 SHA-256、确定性统计和有上限的安全摘要支持复核。
-- 当前本地测试基线为 345 个 pytest，coverage 92.94%。
+- REST API V1 提供严格分页、筛选、状态码、Location、快照和安全回滚测试，不实现不完整的 JWT 或 RBAC。
+- 当前本地测试基线为 488 个 pytest，coverage 93.84%。
 - Ruff 和 GitHub Actions 检查依赖、编译、迁移、模型一致性、测试与 coverage 门槛。
 
 ## 页面截图
@@ -217,6 +242,8 @@ python -m ruff check .
 python -m pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-fail-under=90
 ```
 
+REST API V1 的 pytest 覆盖 health、统一错误、分页、筛选、创建、快照、状态冲突和数据库 rollback。接口文档见 [`docs/api/rest_api_v1.md`](docs/api/rest_api_v1.md)。
+
 ### 数据库迁移检查
 
 ```powershell
@@ -239,9 +266,12 @@ flask --app run.py db check
 
 ```text
 app/
-├── blueprints/             # Web Routes
+├── blueprints/             # Web Routes 与 api_v1
 ├── services/
 │   ├── dashboard_service.py
+│   ├── testcase_service.py
+│   ├── execution_service.py
+│   ├── defect_service.py
 │   ├── junit_import_service.py
 │   ├── junit_xml_parser.py
 │   └── log_analysis_service.py
@@ -249,6 +279,8 @@ app/
 ├── static/
 └── models.py
 docs/
+├── api/
+│   └── rest_api_v1.md
 ├── images/                 # 仅存放 mock/demo 页面截图
 └── samples/
     └── junit_demo_results.xml

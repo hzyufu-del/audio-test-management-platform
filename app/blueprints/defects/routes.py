@@ -3,12 +3,14 @@ from sqlalchemy.exc import IntegrityError
 
 from app.extensions import db
 from app.models import Defect, TestCase, TestExecution
+from app.services.defect_service import (
+    DEFECT_PRIORITIES,
+    DEFECT_SEVERITIES,
+    DEFECT_STATUSES,
+)
 
 
 bp = Blueprint("defects", __name__, url_prefix="/defects")
-DEFECT_SEVERITIES = ("blocker", "critical", "major", "minor")
-DEFECT_PRIORITIES = ("P0", "P1", "P2", "P3")
-DEFECT_STATUSES = ("open", "fixed", "closed", "rejected")
 
 
 @bp.get("/")

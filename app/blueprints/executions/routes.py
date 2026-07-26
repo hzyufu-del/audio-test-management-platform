@@ -5,10 +5,10 @@ from sqlalchemy.exc import IntegrityError
 
 from app.extensions import db
 from app.models import TestCase, TestExecution, Version, utc_now
+from app.services.execution_service import EXECUTION_RESULTS
 
 
 bp = Blueprint("executions", __name__, url_prefix="/test-executions")
-EXECUTION_RESULTS = ("passed", "failed", "blocked", "skipped")
 
 
 @bp.get("/")

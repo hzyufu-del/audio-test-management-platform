@@ -12,12 +12,14 @@ from sqlalchemy.exc import IntegrityError
 from app.extensions import db
 from app.models import TestCase, Version
 from app.services.ai.exceptions import AIReviewError
+from app.services.testcase_service import (
+    TESTCASE_PRIORITIES,
+    TESTCASE_STATUSES,
+)
 from app.services.testcase_ai_service import TestCaseAIService
 
 
 bp = Blueprint("testcases", __name__, url_prefix="/test-cases")
-TESTCASE_PRIORITIES = ("P0", "P1", "P2", "P3")
-TESTCASE_STATUSES = ("draft", "active", "archived")
 
 
 @bp.get("/")

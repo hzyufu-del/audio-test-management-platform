@@ -16,11 +16,11 @@
 
 | 检查项 | 当前结果 |
 | --- | --- |
-| Tests (local) | 488 passed |
+| Tests (local) | 506 passed |
 | Coverage (local) | 93.84% |
 | Coverage gate | 90% |
 | Ruff (local) | passed |
-| GitHub Actions | not run for this local branch |
+| GitHub Actions | Python 3.12 quality checks passed; Docker not included |
 | Migration check (local) | passed |
 | Python CI | 3.12 |
 
@@ -166,7 +166,7 @@ flowchart LR
 - TestRun 与 TestExecution 在单事务中写入，失败时整批 rollback。
 - Log Analysis V1 不保存上传文件，以 SHA-256、确定性统计和有上限的安全摘要支持复核。
 - REST API V1 提供严格分页、筛选、状态码、Location、快照和安全回滚测试，不实现不完整的 JWT 或 RBAC。
-- 当前本地测试基线为 488 个 pytest，coverage 93.84%。
+- 当前本地测试基线为 506 个 pytest，coverage 93.84%。
 - Ruff 和 GitHub Actions 检查依赖、编译、迁移、模型一致性、测试与 coverage 门槛。
 
 ## 页面截图
@@ -223,16 +223,113 @@ flask --app run.py init-db
 flask --app run.py run
 ```
 
-`.env.example` 使用本地 sample 配置：
+`.env.example` 使用本地 demo 配置：
 
 ```dotenv
 FLASK_APP=run.py
 FLASK_DEBUG=1
-SECRET_KEY=sample-local-dev-secret-key
+SECRET_KEY=replace-with-local-secret
 DATABASE_URI=sqlite:///instance/audio_test_platform.sqlite
 ```
 
+`SECRET_KEY` 只是本地占位值，复制为 `.env` 后应替换；不要用于公网或生产环境。
+
 浏览器访问 `http://127.0.0.1:5000`。
+
+## Docker 快速启动
+
+Docker 配置面向本地 demo 和作品展示。首次运行：
+
+```powershell
+Copy-Item .env.example .env
+docker compose up --build
+```
+
+Compose 默认将服务绑定到 `127.0.0.1:5000`，只允许本机访问。
+
+启动入口会先执行 migration upgrade，再根据 `SEED_DEMO_DATA` 决定是否初始化 demo 数据。`.env.example` 默认设置为 `true`，现有 `init-db` 可以重复执行，不会重复插入同一批 seed 记录。
+
+浏览器访问：
+
+```text
+http://127.0.0.1:5000
+```
+
+健康检查：
+
+```text
+http://127.0.0.1:5000/api/v1/health
+```
+
+停止容器并删除本地 demo volume：
+
+```powershell
+docker compose down -v
+```
+
+Compose 会把容器数据库固定到 `/app/instance/audio_test_platform.sqlite`，并挂载 named volume。`.env.example` 中的 `sqlite:///instance/audio_test_platform.sqlite` 供本机 Flask 启动使用，Compose 会显式覆盖为容器内绝对路径。
+
+容器使用 Gunicorn，由非 root 用户运行。默认 `AI_ENABLED=false`、`AI_PROVIDER=mock`，不会调用外部 AI Provider。
+
+## API 演示
+
+先确认应用已运行且执行过 `init-db`。Python 脚本只使用标准库，通过 HTTP 完成 TestCase → failed TestExecution → Defect → fixed Defect 闭环：
+
+```powershell
+python scripts/api_smoke.py
+```
+
+Windows PowerShell 版本：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/api_smoke.ps1 `
+  -BaseUrl http://127.0.0.1:5000 `
+  -TimeoutSec 15
+```
+
+Python 脚本支持自定义地址和超时：
+
+```powershell
+python scripts/api_smoke.py --base-url http://127.0.0.1:5000 --timeout 5
+```
+
+两个脚本每次生成唯一的 mock code，不直接访问数据库。PowerShell 脚本会读取真实 HTTP 状态码，验证 GET/PATCH 的 200、创建请求的 201、错误示例的 415/422/409，并检查创建响应的 `Location` Header。任一步失败都会返回非零退出码，并隐藏 traceback、数据库路径和敏感配置。
+
+## Postman
+
+导入：
+
+```text
+docs/api/audio_test_platform_rest_api_v1.postman_collection.json
+```
+
+Collection 使用 v2.1 格式。运行前设置：
+
+```text
+base_url=http://127.0.0.1:5000
+```
+
+按 Collection 顺序执行即可。`List TestCases` 从 seed 数据取得 `version_id`，后续请求会自动保存 `test_case_id`、`execution_id` 和 `defect_id`。Collection 还包含 415、422 和 409 示例。
+
+## 交付安全边界
+
+- Docker 配置只用于本地 demo 和作品展示。
+- 当前 API 没有生产级认证，不应直接暴露公网。
+- SQLite 适合单机演示，不代表生产环境的并发和高可用方案。
+- Log Analysis 不保存上传的原始日志。
+- `.env`、API Key、数据库文件和 Docker volume 内容不会提交到仓库。
+- 默认关闭外部 AI Provider；mock Provider 不访问网络。
+
+## 推荐演示顺序
+
+1. 打开 Dashboard，说明数据库聚合指标。
+2. 导入 sample JUnit XML，查看 TestRun 与执行快照。
+3. 上传 mock Log，查看确定性风险和关键发现。
+4. 在 TestCase 详情页运行旁路 AI Review。
+5. 执行 REST API smoke 脚本。
+6. 导入 Postman Collection，演示成功与错误响应。
+
+完整讲解材料见 [`docs/portfolio/project_walkthrough.md`](docs/portfolio/project_walkthrough.md)。
 
 ### 测试、Ruff 与 coverage
 
@@ -243,6 +340,24 @@ python -m pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-fail
 ```
 
 REST API V1 的 pytest 覆盖 health、统一错误、分页、筛选、创建、快照、状态冲突和数据库 rollback。接口文档见 [`docs/api/rest_api_v1.md`](docs/api/rest_api_v1.md)。
+
+#### pytest 自动验证
+
+- Dockerfile、Compose 回环地址绑定、entrypoint 和 `.dockerignore` 静态规则
+- Postman JSON 结构和敏感字段边界
+- Python smoke 的模拟 HTTP 正常闭环、服务不可用、非 JSON、超时和 409
+- PowerShell smoke 的真实状态码、超时、错误状态和 `Location` 检查逻辑
+- 本机存在 PowerShell 时，自动执行 AST 解析及本地 HTTP stub 闭环
+
+#### 本地人工实际验证
+
+- `docker compose build`、`docker compose up` 和 healthcheck
+- 容器非 root 用户及 `127.0.0.1:5000` HostIp
+- Python 与 PowerShell 真实 HTTP smoke
+- 服务不可用时 PowerShell 的超时和非零退出
+- 验收后的 `docker compose down -v`
+
+PR 的 GitHub Actions 在 Python 3.12 环境检查依赖、编译、Ruff、迁移、pytest 和 coverage；当前工作流不执行 Docker build。
 
 ### 数据库迁移检查
 
@@ -280,12 +395,20 @@ app/
 └── models.py
 docs/
 ├── api/
-│   └── rest_api_v1.md
+│   ├── rest_api_v1.md
+│   └── audio_test_platform_rest_api_v1.postman_collection.json
 ├── images/                 # 仅存放 mock/demo 页面截图
+├── portfolio/
+│   └── project_walkthrough.md
 └── samples/
     └── junit_demo_results.xml
+docker/
+└── entrypoint.sh
 migrations/                 # Flask-Migrate 迁移
+scripts/
+├── api_smoke.py
+└── api_smoke.ps1
 tests/                      # pytest 测试
 ```
 
-技术栈：Python 3.12、Flask、Flask-SQLAlchemy、Flask-Migrate、SQLite、Bootstrap 5、Chart.js、pytest、pytest-cov、Ruff、GitHub Actions。
+技术栈：Python 3.12、Flask、Flask-SQLAlchemy、Flask-Migrate、SQLite、Gunicorn、Docker Compose、Bootstrap 5、Chart.js、pytest、pytest-cov、Ruff、GitHub Actions。

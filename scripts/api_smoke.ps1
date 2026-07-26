@@ -136,12 +136,16 @@ function Invoke-ApiRequest {
             throw "$Method $Uri failed: HTTP status was unavailable."
         }
 
-        $responseBody = Get-ResponseBody -Response $errorResponse
-        if (
-            [string]::IsNullOrWhiteSpace($responseBody) -and
-            -not [string]::IsNullOrWhiteSpace($_.ErrorDetails.Message)
-        ) {
+        if (-not [string]::IsNullOrWhiteSpace($_.ErrorDetails.Message)) {
             $responseBody = $_.ErrorDetails.Message
+        }
+        else {
+            try {
+                $responseBody = Get-ResponseBody -Response $errorResponse
+            }
+            catch {
+                $responseBody = ""
+            }
         }
         $responseHeaders = $errorResponse.Headers
     }

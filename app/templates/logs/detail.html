@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block title %}{{ log_file.filename }} - Log Analysis{% endblock %}
+
+{% block content %}
+  <section class="page-heading">
+    <div>
+      <p class="eyebrow">analysis detail</p>
+      <h1>{{ log_file.filename }}</h1>
+      <p class="text-muted mb-0">
+        {{ log_file.project.name }}
+        {% if log_file.version %}/ {{ log_file.version.name }}{% endif %}
+      </p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{{ url_for('logs.index') }}">返回列表</a>
+  </section>
+
+  <section class="panel mb-4">
+    <div class="panel-header">
+      <h2>基础元数据</h2>
+      <span class="badge text-bg-secondary">{{ log_file.analysis_status }}</span>
+    </div>
+    <dl class="row mb-0">
+      <dt class="col-sm-3">文件大小</dt>
+      <dd class="col-sm-9">{{ log_file.file_size_bytes }} bytes</dd>
+      <dt class="col-sm-3">SHA-256</dt>
+      <dd class="col-sm-9"><code>{{ log_file.sha256 }}</code></dd>
+      <dt class="col-sm-3">上传人</dt>
+      <dd class="col-sm-9">{{ log_file.uploaded_by }}</dd>
+      <dt class="col-sm-3">上传时间</dt>
+      <dd class="col-sm-9">{{ log_file.uploaded_at.strftime("%Y-%m-%d %H:%M:%S") }}</dd>
+      <dt class="col-sm-3">备注</dt>
+      <dd class="col-sm-9">{{ log_file.notes or "无" }}</dd>
+    </dl>
+  </section>
+
+  <section class="panel mb-4">
+    <div class="panel-header">
+      <h2>统计结果</h2>
+      <span class="badge text-bg-secondary">{{ log_file.risk_level }}</span>
+    </div>
+    <div class="row g-3">
+      <div class="col-6 col-lg"><div class="metric-card"><span>总行数</span><strong>{{ log_file.total_lines }}</strong></div></div>
+      <div class="col-6 col-lg"><div class="metric-card"><span>Critical</span><strong>{{ log_file.critical_count }}</strong></div></div>
+      <div class="col-6 col-lg"><div class="metric-card"><span>Error</span><strong>{{ log_file.error_count }}</strong></div></div>
+      <div class="col-6 col-lg"><div class="metric-card"><span>Warning</span><strong>{{ log_file.warning_count }}</strong></div></div>
+      <div class="col-6 col-lg"><div class="metric-card"><span>Info</span><strong>{{ log_file.info_count }}</strong></div></div>
+    </div>
+  </section>
+
+  <section class="panel mb-4">
+    <div class="panel-header">
+      <h2>领域命中</h2>
+    </div>
+    <div class="row g-3">
+      {% for domain, count in summary.get("domains", {}).items() %}
+        <div class="col-6 col-md">
+          <div class="metric-card">
+            <span>{{ domain }}</span>
+            <strong>{{ count }}</strong>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="panel mb-4">
+    <div class="panel-header">
+      <h2>关键发现</h2>
+      {% if summary.get("findings_truncated") %}
+        <span class="text-muted small">仅展示前若干条摘要</span>
+      {% endif %}
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <th>行号</th>
+            <th>级别</th>
+            <th>领域</th>
+            <th>安全截断片段</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for finding in summary.get("findings", []) %}
+            <tr>
+              <td>{{ finding.line_number }}</td>
+              <td>{{ finding.level }}</td>
+              <td>{{ finding.domains|join(", ") or "未分类" }}</td>
+              <td><code>{{ finding.snippet }}</code></td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="4" class="text-center text-muted py-4">
+                未发现 warning/error/critical 级别内容。
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="alert alert-info" role="note">
+    <strong>Privacy boundary:</strong>
+    Original log content is never stored. Displayed snippets are bounded
+    analysis findings and are escaped automatically by Jinja.
+  </div>
+{% endblock %}

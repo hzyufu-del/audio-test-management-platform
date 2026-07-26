@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Log Analysis - Audio Test Platform{% endblock %}
+
+{% block content %}
+  <section class="page-heading">
+    <div>
+      <p class="eyebrow">deterministic analysis</p>
+      <h1>Log Analysis</h1>
+      <p class="text-muted mb-0">
+        分析受限的 UTF-8 文本日志，仅保留元数据和分析摘要。
+      </p>
+    </div>
+    <a class="btn btn-primary" href="{{ url_for('logs.upload') }}">上传并分析 Log</a>
+  </section>
+
+  <section class="panel">
+    <div class="panel-header">
+      <h2>分析记录</h2>
+      <span class="text-muted small">数据来自数据库，不保存原始日志正文</span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <th>文件名</th>
+            <th>Project</th>
+            <th>Version</th>
+            <th>风险</th>
+            <th>错误</th>
+            <th>警告</th>
+            <th>上传时间</th>
+            <th class="text-end">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in log_files %}
+            <tr>
+              <td class="fw-semibold">{{ item.filename }}</td>
+              <td>{{ item.project.name }}</td>
+              <td>{{ item.version.name if item.version else "未关联" }}</td>
+              <td data-log-risk="{{ item.risk_level }}">
+                <span class="badge text-bg-secondary">{{ item.risk_level }}</span>
+              </td>
+              <td data-log-errors="{{ item.error_count }}">{{ item.error_count }}</td>
+              <td data-log-warnings="{{ item.warning_count }}">{{ item.warning_count }}</td>
+              <td>{{ item.uploaded_at.strftime("%Y-%m-%d %H:%M") }}</td>
+              <td class="text-end">
+                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('logs.detail', log_id=item.id) }}">查看</a>
+              </td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="8" class="text-center text-muted py-4">
+                暂无日志分析记录。
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

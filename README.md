@@ -16,12 +16,12 @@
 
 | 检查项 | 当前结果 |
 | --- | --- |
-| Tests | 297 passed |
-| Coverage | 92.48% |
+| Tests (local) | 345 passed |
+| Coverage (local) | 92.94% |
 | Coverage gate | 90% |
-| Ruff | passed |
-| GitHub Actions | passed |
-| Migration check | passed |
+| Ruff (local) | passed |
+| GitHub Actions | not run for this local branch |
+| Migration check (local) | passed |
 | Python CI | 3.12 |
 
 ## 业务流程
@@ -45,6 +45,41 @@ flowchart LR
 
 `JUnitXmlParserService` 是图中的架构角色；代码中的实际实现类名为 `JUnitXmlParser`。
 
+### Log Analysis V1
+
+```mermaid
+flowchart LR
+    Upload["上传 .log / .txt"] --> Validate["大小、UTF-8、二进制、行数、行长校验"]
+    Validate --> LogParser["LogTextParser<br/>确定性分析"]
+    LogParser --> Summary["级别、风险、领域、关键发现、SHA-256"]
+    Summary --> LogFile["LogFile 元数据与 JSON 摘要"]
+    LogFile --> Detail["列表页 / 详情页"]
+```
+
+1. 上传时必须选择 Project；Version 可选，但选择后必须属于该 Project。
+2. `LogTextParser` 只接收内存中的 bytes，不依赖 Flask、SQLAlchemy 或 AI Provider。
+3. 解析器按大小写无关的固定规则统计 critical / error / warning / info，并识别 connection / power / battery / audio / protocol。
+4. 风险等级依次为 critical、high、medium、low；关键发现保留行号和安全截断片段。
+5. 同一 Project 下使用 `(project_id, sha256)` 唯一约束阻止重复分析；数据库失败时 rollback。
+6. 数据库只保存文件名、大小、SHA-256、统计结果和有上限的 JSON 摘要，不保存上传文件或完整日志正文。
+
+#### Log 安全边界
+
+- 只接受 `.log` / `.txt`，文件名经 `secure_filename` 规范化。
+- 文件上限为 2 MiB、20,000 行、单行 8,192 字符；只接受 UTF-8 / UTF-8 BOM，并拒绝明显二进制内容。
+- 原始日志不落盘、不写入数据库，也没有原始文件下载路由。
+- JSON 摘要最多保存 50 条关键发现，每条片段最多 240 字符；页面使用 Jinja 自动转义，不使用 `|safe`。
+- demo seed 仅在内存中分析 mock / demo / sample 文本，持久化后不保留样本文本或本地绝对路径。
+- Log Analysis V1 不调用 AI，不新增 ADB、串口、压缩包、异步任务或外部检索服务。
+
+#### 主要测试场景
+
+- 正常分析、大小写无关关键字、四档风险、多领域命中、稳定 SHA-256 和 JSON 可序列化。
+- 空文件、超大文件、非 UTF-8、明显二进制、超行数、超行长、扩展名与文件名安全。
+- Project / Version 缺失、不存在或跨 Project，重复日志、数据库失败 rollback 和详情 404。
+- 模型字段/可空性/外键/唯一约束，migration upgrade / downgrade / re-upgrade 与 `flask db check`。
+- 关键片段截断、HTML 自动转义、原始正文不入库，以及 `init-db` 重复执行幂等。
+
 ## 数据模型
 
 ```mermaid
@@ -52,12 +87,14 @@ erDiagram
     Project ||--o{ Version : contains
     Version ||--o{ TestCase : defines
     Version ||--o{ TestRun : records
+    Project ||--o{ LogFile : owns
+    Version |o--o{ LogFile : optionally_links
     TestCase ||--o{ TestExecution : produces
     TestRun ||--o{ TestExecution : groups
     TestExecution ||--o{ Defect : raises
 ```
 
-模型通过现有外键建立关系：TestCase 只保存 `version_id`，TestExecution 只保存 `test_case_id` 和可选的 `test_run_id`，没有重复保存 Project 或 Version 外键。
+模型通过外键建立关系：TestCase 只保存 `version_id`，TestExecution 只保存 `test_case_id` 和可选的 `test_run_id`；LogFile 保存必填 `project_id` 和可选 `version_id`，不保存原始日志正文或本地文件路径。
 
 ## 架构
 
@@ -69,6 +106,7 @@ flowchart LR
         Dashboard["DashboardService<br/>(dashboard_service.py)"]
         Parser["JUnitXmlParserService<br/>(JUnitXmlParser)"]
         Import["JUnitImportService"]
+        LogParser["LogTextParser"]
     end
 
     Models["SQLAlchemy Models"]
@@ -76,6 +114,8 @@ flowchart LR
 
     Routes --> Dashboard
     Routes --> Parser
+    Routes --> LogParser
+    Routes --> Models
     Parser --> Import
     Dashboard --> Models
     Import --> Models
@@ -85,6 +125,7 @@ flowchart LR
 - Parser 不依赖 Flask 和数据库，输入 bytes，输出标准化且不可变的解析结果；`defusedxml` 禁止 DTD、实体和外部引用。
 - Import Service 按目标 Version 严格匹配 TestCase code，以 SHA-256 报告摘要实现幂等，并在单事务中写入 TestRun 与 TestExecution；约束或数据库错误会触发整批回滚。
 - Dashboard Service 对数据库中的 Project、Version、TestExecution 和 Defect 做聚合，生成指标、趋势、版本质量和关注项。
+- LogTextParser 执行同步、有边界、可重复的纯文本分析；路由只负责 Project / Version 校验和数据库事务。
 
 ## 项目亮点
 
@@ -99,7 +140,8 @@ flowchart LR
 - 导入前严格匹配目标 Version 下的 TestCase code，匹配失败时不写入部分数据。
 - 以 SHA-256 报告摘要识别重复导入。
 - TestRun 与 TestExecution 在单事务中写入，失败时整批 rollback。
-- 当前测试基线为 297 个 pytest，coverage 92.48%。
+- Log Analysis V1 不保存上传文件，以 SHA-256、确定性统计和有上限的安全摘要支持复核。
+- 当前本地测试基线为 345 个 pytest，coverage 92.94%。
 - Ruff 和 GitHub Actions 检查依赖、编译、迁移、模型一致性、测试与 coverage 门槛。
 
 ## 页面截图
@@ -201,7 +243,8 @@ app/
 ├── services/
 │   ├── dashboard_service.py
 │   ├── junit_import_service.py
-│   └── junit_xml_parser.py
+│   ├── junit_xml_parser.py
+│   └── log_analysis_service.py
 ├── templates/
 ├── static/
 └── models.py

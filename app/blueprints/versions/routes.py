@@ -73,6 +73,16 @@ def edit(version_id):
 def delete(version_id):
     version = db.get_or_404(Version, version_id)
 
+    if version.test_design_sessions:
+        flash(
+            "This Version has an AI Test Design Session and cannot be "
+            "deleted without preserving its draft review history.",
+            "warning",
+        )
+        return redirect(
+            url_for("versions.detail", version_id=version.id)
+        )
+
     if version.testcases:
         flash("该版本下已有测试用例，不能直接删除。请先归档版本或清理关联用例。", "warning")
         return redirect(url_for("versions.detail", version_id=version.id))
@@ -122,6 +132,15 @@ def validate_version_form(form_data, version):
         errors.append("所属项目不能为空。")
     elif project is None:
         errors.append("所属项目不存在，请选择一个有效的 mock/demo/sample 项目。")
+    elif (
+        version.id is not None
+        and version.project_id != project.id
+        and version.test_design_sessions
+    ):
+        errors.append(
+            "A Version with an AI Test Design Session cannot move to "
+            "another Project."
+        )
 
     if not form_data["name"]:
         errors.append("版本名称不能为空。")

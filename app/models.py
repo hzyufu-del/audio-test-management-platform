@@ -43,6 +43,11 @@ class Project(db.Model):
 
     versions = db.relationship("Version", back_populates="project", lazy=True)
     log_files = db.relationship("LogFile", back_populates="project", lazy=True)
+    test_design_sessions = db.relationship(
+        "TestDesignSession",
+        back_populates="project",
+        lazy=True,
+    )
 
     def __repr__(self):
         return f"<Project {self.code}>"
@@ -73,6 +78,11 @@ class Version(db.Model):
     testcases = db.relationship("TestCase", back_populates="version", lazy=True)
     test_runs = db.relationship("TestRun", back_populates="version", lazy=True)
     log_files = db.relationship("LogFile", back_populates="version", lazy=True)
+    test_design_sessions = db.relationship(
+        "TestDesignSession",
+        back_populates="version",
+        lazy=True,
+    )
 
     def __repr__(self):
         return f"<Version {self.name}>"
@@ -149,9 +159,160 @@ class TestCase(db.Model):
 
     version = db.relationship("Version", back_populates="testcases")
     executions = db.relationship("TestExecution", back_populates="testcase", lazy=True)
+    accepted_draft = db.relationship(
+        "TestCaseDraft",
+        back_populates="accepted_test_case",
+        foreign_keys="TestCaseDraft.accepted_test_case_id",
+        uselist=False,
+    )
 
     def __repr__(self):
         return f"<TestCase {self.title}>"
+
+
+class TestDesignSession(db.Model):
+    __table_args__ = (
+        db.CheckConstraint(
+            "status IN "
+            "('generated', 'partially_reviewed', 'accepted', 'rejected')",
+            name="ck_test_design_session_status",
+        ),
+        db.CheckConstraint(
+            "provider IN ('mock', 'deepseek')",
+            name="ck_test_design_session_provider",
+        ),
+        db.CheckConstraint(
+            "quality_score >= 0 AND quality_score <= 100",
+            name="ck_test_design_session_quality_score",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("project.id"),
+        nullable=False,
+        index=True,
+    )
+    version_id = db.Column(
+        db.Integer,
+        db.ForeignKey("version.id"),
+        nullable=False,
+        index=True,
+    )
+    title = db.Column(db.String(200), nullable=False)
+    requirement_text = db.Column(db.Text, nullable=False)
+    status = db.Column(
+        db.String(30),
+        default="generated",
+        nullable=False,
+        index=True,
+    )
+    provider = db.Column(db.String(30), nullable=False, index=True)
+    provider_model = db.Column(db.String(120))
+    prompt_version = db.Column(db.String(40), nullable=False)
+    quality_score = db.Column(db.Integer, nullable=False)
+    test_points_json = db.Column(db.Text, nullable=False)
+    limitations_json = db.Column(db.Text, nullable=False)
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        default=utc_now,
+        nullable=False,
+    )
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+        nullable=False,
+    )
+
+    project = db.relationship("Project", back_populates="test_design_sessions")
+    version = db.relationship("Version", back_populates="test_design_sessions")
+    drafts = db.relationship(
+        "TestCaseDraft",
+        back_populates="session",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        lazy=True,
+    )
+
+    def __repr__(self):
+        return f"<TestDesignSession {self.title}>"
+
+
+class TestCaseDraft(db.Model):
+    __table_args__ = (
+        db.CheckConstraint(
+            "status IN ('pending', 'accepted', 'rejected')",
+            name="ck_test_case_draft_status",
+        ),
+        db.CheckConstraint(
+            "scenario_type IN "
+            "('normal', 'negative', 'boundary', 'compatibility', "
+            "'recovery', 'security')",
+            name="ck_test_case_draft_scenario_type",
+        ),
+        db.CheckConstraint(
+            "("
+            "status = 'accepted' AND accepted_test_case_id IS NOT NULL"
+            ") OR ("
+            "status != 'accepted' AND accepted_test_case_id IS NULL"
+            ")",
+            name="ck_test_case_draft_accepted_link",
+        ),
+        db.UniqueConstraint(
+            "accepted_test_case_id",
+            name="uq_test_case_draft_accepted_case",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    session_id = db.Column(
+        db.Integer,
+        db.ForeignKey("test_design_session.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    suggested_code = db.Column(db.String(80), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    module = db.Column(db.String(80), nullable=False)
+    priority = db.Column(db.String(20), nullable=False)
+    case_type = db.Column(db.String(40), nullable=False)
+    precondition = db.Column(db.Text)
+    steps = db.Column(db.Text, nullable=False)
+    expected_result = db.Column(db.Text, nullable=False)
+    scenario_type = db.Column(db.String(30), nullable=False)
+    status = db.Column(
+        db.String(30),
+        default="pending",
+        nullable=False,
+        index=True,
+    )
+    accepted_test_case_id = db.Column(
+        db.Integer,
+        db.ForeignKey("test_case.id"),
+    )
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        default=utc_now,
+        nullable=False,
+    )
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+        nullable=False,
+    )
+
+    session = db.relationship("TestDesignSession", back_populates="drafts")
+    accepted_test_case = db.relationship(
+        "TestCase",
+        back_populates="accepted_draft",
+        foreign_keys=[accepted_test_case_id],
+    )
+
+    def __repr__(self):
+        return f"<TestCaseDraft {self.suggested_code}:{self.status}>"
 
 
 class TestExecution(db.Model):

@@ -98,6 +98,16 @@ def edit(test_case_id):
 def delete(test_case_id):
     test_case = db.get_or_404(TestCase, test_case_id)
 
+    if test_case.accepted_draft is not None:
+        flash(
+            "This TestCase is linked to an accepted AI Test Design Draft "
+            "and cannot be deleted without preserving the audit link.",
+            "warning",
+        )
+        return redirect(
+            url_for("testcases.detail", test_case_id=test_case.id)
+        )
+
     if test_case.executions:
         flash("该用例下已有执行记录，不能直接删除。请先归档用例或清理关联执行记录。", "warning")
         return redirect(url_for("testcases.detail", test_case_id=test_case.id))

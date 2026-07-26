@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}New AI Test Design - Audio Test Platform{% endblock %}
+
+{% block content %}
+  <section class="page-heading">
+    <div>
+      <p class="eyebrow">bounded requirement input</p>
+      <h1>New AI Test Design Session</h1>
+      <p class="text-muted mb-0">
+        Use mock, demo, or sample content only. Do not paste real company,
+        credential, log, path, or customer data.
+      </p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{{ url_for('ai_test_design.index') }}">Back to list</a>
+  </section>
+
+  {% if errors %}
+    <div class="alert alert-danger" role="alert">
+      <ul class="mb-0">
+        {% for error in errors %}<li>{{ error }}</li>{% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  <section class="panel">
+    <form method="post" class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label" for="project_id">Project</label>
+        <select class="form-select" id="project_id" name="project_id" required>
+          <option value="">Choose a Project</option>
+          {% for project in projects %}
+            <option value="{{ project.id }}" {% if form_data.project_id|string == project.id|string %}selected{% endif %}>{{ project.name }} ({{ project.code }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="version_id">Version</label>
+        <select class="form-select" id="version_id" name="version_id" required>
+          <option value="">Choose a Version</option>
+          {% for version in versions %}
+            <option value="{{ version.id }}" data-project-id="{{ version.project_id }}" {% if form_data.version_id|string == version.id|string %}selected{% endif %}>{{ version.name }} ({{ version.code }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12">
+        <label class="form-label" for="title">Title</label>
+        <input class="form-control" id="title" name="title" maxlength="200" value="{{ form_data.title }}" required>
+      </div>
+      <div class="col-12">
+        <label class="form-label" for="requirement_text">Requirement Text</label>
+        <textarea class="form-control" id="requirement_text" name="requirement_text" minlength="20" maxlength="2000" rows="9" required>{{ form_data.requirement_text }}</textarea>
+      </div>
+      <div class="col-12">
+        <div class="alert alert-info mb-0" role="note">
+          Generated items are TestCase drafts, not formal TestCases. A tester
+          must verify the requirement, device state, steps, and observable
+          result before accepting any draft.
+        </div>
+      </div>
+      <div class="col-12 d-flex gap-2">
+        <button class="btn btn-primary" type="submit">Generate drafts</button>
+        <a class="btn btn-outline-secondary" href="{{ url_for('ai_test_design.index') }}">Cancel</a>
+      </div>
+    </form>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    (() => {
+      const project = document.getElementById("project_id");
+      const version = document.getElementById("version_id");
+      const filterVersions = () => {
+        const selectedProject = project.value;
+        for (const option of version.options) {
+          if (!option.value) continue;
+          option.hidden = Boolean(selectedProject) &&
+            option.dataset.projectId !== selectedProject;
+          if (option.hidden && option.selected) version.value = "";
+        }
+      };
+      project.addEventListener("change", filterVersions);
+      filterVersions();
+    })();
+  </script>
+{% endblock %}

@@ -1,4 +1,5 @@
 from datetime import timedelta
+import json
 from pathlib import Path
 
 import click
@@ -33,6 +34,7 @@ def create_app(config_overrides=None):
 
 
 def register_blueprints(app):
+    from .blueprints.ai_test_design import bp as ai_test_design_bp
     from .blueprints.api_v1 import bp as api_v1_bp
     from .blueprints.auth import bp as auth_bp
     from .blueprints.dashboard import bp as dashboard_bp
@@ -45,6 +47,7 @@ def register_blueprints(app):
     from .blueprints.versions import bp as versions_bp
 
     app.register_blueprint(dashboard_bp)
+    app.register_blueprint(ai_test_design_bp)
     app.register_blueprint(api_v1_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(projects_bp)
@@ -72,6 +75,8 @@ def ensure_migrated_database():
         LogFile,
         Project,
         TestCase,
+        TestCaseDraft,
+        TestDesignSession,
         TestExecution,
         TestRun,
         User,
@@ -85,6 +90,8 @@ def ensure_migrated_database():
             Project,
             Version,
             TestCase,
+            TestDesignSession,
+            TestCaseDraft,
             TestRun,
             TestExecution,
             Defect,
@@ -107,6 +114,8 @@ def seed_demo_data():
         LogFile,
         Project,
         TestCase,
+        TestCaseDraft,
+        TestDesignSession,
         TestExecution,
         User,
         Version,
@@ -230,6 +239,77 @@ def seed_demo_data():
         "Sample Firmware Gamma",
         "testing",
     )
+
+    design_session = TestDesignSession.query.filter_by(
+        project_id=project.id,
+        version_id=version.id,
+        title="Demo AI Audio Test Design",
+    ).first()
+    if design_session is None:
+        design_session = TestDesignSession(
+            project_id=project.id,
+            version_id=version.id,
+            title="Demo AI Audio Test Design",
+            requirement_text=(
+                "Sample audio volume adjustment for a mock connected device."
+            ),
+            status="generated",
+            provider="mock",
+            provider_model=None,
+            prompt_version="test-design-v1",
+            quality_score=100,
+            test_points_json=json.dumps(
+                [
+                    {
+                        "category": "functional",
+                        "title": "Validate sample audio behavior",
+                        "description": (
+                            "Verify observable mock audio state changes."
+                        ),
+                        "priority": "P0",
+                    }
+                ],
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
+            limitations_json=json.dumps(
+                [
+                    "Generated from sample requirement text only and "
+                    "requires human review."
+                ],
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
+        )
+        db.session.add(design_session)
+        for index, scenario_type in enumerate(
+            ("normal", "negative", "boundary"),
+            start=1,
+        ):
+            design_session.drafts.append(
+                TestCaseDraft(
+                    suggested_code=f"TC_AI_AUDIO_DEMO_{index:03d}",
+                    title=(
+                        f"Validate sample audio {scenario_type} behavior"
+                    ),
+                    module="Audio",
+                    priority="P0" if scenario_type == "normal" else "P1",
+                    case_type="checklist",
+                    precondition=(
+                        "Mock audio device is connected in a known state."
+                    ),
+                    steps=(
+                        "1. Configure the mock audio fixture.\n"
+                        "2. Trigger the sample action."
+                    ),
+                    expected_result=(
+                        "The displayed mock audio status shows the expected "
+                        f"{scenario_type} value."
+                    ),
+                    scenario_type=scenario_type,
+                    status="pending",
+                )
+            )
 
     testcase = ensure_testcase(
         version,

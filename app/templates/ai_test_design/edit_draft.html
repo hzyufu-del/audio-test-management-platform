@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}Edit TestCase Draft - AI Test Design{% endblock %}
+
+{% block content %}
+  <section class="page-heading">
+    <div>
+      <p class="eyebrow">human edit before acceptance</p>
+      <h1>Edit TestCase Draft</h1>
+      <p class="text-muted mb-0">Only pending drafts can be edited.</p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{{ url_for('ai_test_design.detail', session_id=draft.session_id) }}">Back to session</a>
+  </section>
+
+  {% if errors %}
+    <div class="alert alert-danger" role="alert">
+      <ul class="mb-0">
+        {% for error in errors %}<li>{{ error }}</li>{% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  <section class="panel">
+    <form method="post" class="row g-3">
+      <div class="col-md-4">
+        <label class="form-label" for="suggested_code">Suggested code</label>
+        <input class="form-control" id="suggested_code" name="suggested_code" maxlength="80" value="{{ form_data.suggested_code }}" required>
+      </div>
+      <div class="col-md-8">
+        <label class="form-label" for="title">Title</label>
+        <input class="form-control" id="title" name="title" maxlength="200" value="{{ form_data.title }}" required>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label" for="module">Module</label>
+        <input class="form-control" id="module" name="module" maxlength="80" value="{{ form_data.module }}" required>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label" for="priority">Priority</label>
+        <select class="form-select" id="priority" name="priority">
+          {% for value in priorities %}<option value="{{ value }}" {% if form_data.priority == value %}selected{% endif %}>{{ value }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label" for="case_type">Case type</label>
+        <select class="form-select" id="case_type" name="case_type">
+          {% for value in case_types %}<option value="{{ value }}" {% if form_data.case_type == value %}selected{% endif %}>{{ value }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label" for="scenario_type">Scenario</label>
+        <select class="form-select" id="scenario_type" name="scenario_type">
+          {% for value in scenario_types %}<option value="{{ value }}" {% if form_data.scenario_type == value %}selected{% endif %}>{{ value }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-12">
+        <label class="form-label" for="precondition">Precondition</label>
+        <textarea class="form-control" id="precondition" name="precondition" rows="3" maxlength="4000">{{ form_data.precondition }}</textarea>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="steps">Steps</label>
+        <textarea class="form-control" id="steps" name="steps" rows="8" maxlength="4000" required>{{ form_data.steps }}</textarea>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="expected_result">Expected result</label>
+        <textarea class="form-control" id="expected_result" name="expected_result" rows="8" maxlength="4000" required>{{ form_data.expected_result }}</textarea>
+      </div>
+      <div class="col-12">
+        <button class="btn btn-primary" type="submit">Save human edits</button>
+      </div>
+    </form>
+  </section>
+{% endblock %}

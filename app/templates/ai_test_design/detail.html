@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+
+{% block title %}{{ session.title }} - AI Test Design{% endblock %}
+
+{% block content %}
+  <section class="page-heading">
+    <div>
+      <p class="eyebrow">human review workspace</p>
+      <h1>{{ session.title }}</h1>
+      <p class="text-muted mb-0">
+        {{ session.project.name }} / {{ session.version.name }} ·
+        {{ session.provider }}{% if session.provider_model %} / {{ session.provider_model }}{% endif %} ·
+        {{ session.prompt_version }}
+      </p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{{ url_for('ai_test_design.index') }}">Back to list</a>
+  </section>
+
+  <div class="alert alert-warning" role="note">
+    AI output requires human review and cannot replace requirement
+    confirmation. Accepting a draft records that a tester reviewed it; it
+    does not prove a real device works correctly.
+  </div>
+
+  <section class="panel mb-4">
+    <div class="panel-header">
+      <h2>Requirement Text</h2>
+      <span class="badge text-bg-secondary">{{ session.status }}</span>
+    </div>
+    <p class="mb-0 text-break" style="white-space: pre-wrap;">{{ session.requirement_text }}</p>
+  </section>
+
+  <section class="panel mb-4">
+    <div class="panel-header">
+      <h2>Quality score</h2>
+      <span class="fs-4 fw-semibold">{{ assessment.quality_score }}/100</span>
+    </div>
+    <div class="row g-3">
+      {% for name, score in assessment.dimension_scores.items() %}
+        <div class="col-md-4">
+          <div class="border rounded p-3 h-100">
+            <div class="small text-muted">{{ name.replace("_", " ").title() }}</div>
+            <div class="fw-semibold">{{ score }}</div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+    {% if assessment.missing_scenarios %}
+      <p class="text-danger mt-3 mb-0">
+        Missing scenarios:
+        {{ assessment.missing_scenarios | map(attribute="value") | join(", ") }}
+      </p>
+    {% endif %}
+    {% if assessment.deduction_reasons %}
+      <div class="mt-3">
+        <div class="fw-semibold">Review deductions</div>
+        <ul class="mb-0">
+          {% for reason in assessment.deduction_reasons %}
+            <li>{{ reason }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+    {% if assessment.risk_warnings %}
+      <div class="mt-3">
+        <div class="fw-semibold">Input risk warnings</div>
+        <ul class="mb-0">
+          {% for warning in assessment.risk_warnings %}
+            <li>{{ warning }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+    {% if assessment.quality_score < 100 %}
+      <div class="alert alert-warning mt-3 mb-0" role="note">
+        Supplement the drafts manually before acceptance. A lower score never
+        creates or rejects a formal TestCase automatically.
+      </div>
+    {% endif %}
+  </section>
+
+  <section class="panel mb-4">
+    <div class="panel-header"><h2>Structured test points</h2></div>
+    <div class="row g-3">
+      {% for point in test_points %}
+        <div class="col-md-6">
+          <article class="border rounded p-3 h-100">
+            <div class="d-flex justify-content-between">
+              <span class="badge text-bg-light">{{ point.category.value }}</span>
+              <span class="badge text-bg-secondary">{{ point.priority.value }}</span>
+            </div>
+            <h3 class="h6 mt-3">{{ point.title }}</h3>
+            <p class="mb-0 text-muted">{{ point.description }}</p>
+          </article>
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="panel mb-4">
+    <div class="panel-header"><h2>Limitations and security reminders</h2></div>
+    <ul class="mb-0">
+      {% for item in limitations %}<li>{{ item }}</li>{% endfor %}
+    </ul>
+  </section>
+
+  <section class="panel">
+    <div class="panel-header">
+      <h2>TestCase Drafts</h2>
+      <span class="text-muted small">{{ session.drafts|length }} drafts</span>
+    </div>
+    <div class="d-grid gap-3">
+      {% for draft in session.drafts %}
+        <article class="border rounded p-3">
+          <div class="d-flex flex-wrap justify-content-between gap-2">
+            <div>
+              <div class="d-flex gap-2 flex-wrap mb-2">
+                <span class="badge text-bg-secondary">{{ draft.status }}</span>
+                <span class="badge text-bg-light">{{ draft.scenario_type }}</span>
+                <span class="badge text-bg-light">{{ draft.priority }}</span>
+              </div>
+              <h3 class="h5 mb-1">{{ draft.title }}</h3>
+              <div class="text-muted small">{{ draft.suggested_code }} · {{ draft.module }} · {{ draft.case_type }}</div>
+            </div>
+            <div class="d-flex gap-2 align-items-start">
+              {% if draft.status == "pending" %}
+                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('ai_test_design.edit_draft', draft_id=draft.id) }}">Edit</a>
+                <form method="post" action="{{ url_for('ai_test_design.accept_draft', draft_id=draft.id) }}">
+                  <button class="btn btn-sm btn-success" type="submit">Accept</button>
+                </form>
+                <form method="post" action="{{ url_for('ai_test_design.reject_draft', draft_id=draft.id) }}">
+                  <button class="btn btn-sm btn-outline-danger" type="submit">Reject</button>
+                </form>
+              {% elif draft.accepted_test_case %}
+                <a class="btn btn-sm btn-success" href="{{ url_for('testcases.detail', test_case_id=draft.accepted_test_case.id) }}">Formal TestCase</a>
+              {% endif %}
+            </div>
+          </div>
+          <hr>
+          <dl class="row mb-0">
+            <dt class="col-md-3">Precondition</dt>
+            <dd class="col-md-9" style="white-space: pre-wrap;">{{ draft.precondition or "Not provided" }}</dd>
+            <dt class="col-md-3">Steps</dt>
+            <dd class="col-md-9" style="white-space: pre-wrap;">{{ draft.steps }}</dd>
+            <dt class="col-md-3">Expected result</dt>
+            <dd class="col-md-9" style="white-space: pre-wrap;">{{ draft.expected_result }}</dd>
+          </dl>
+        </article>
+      {% endfor %}
+    </div>
+  </section>
+{% endblock %}

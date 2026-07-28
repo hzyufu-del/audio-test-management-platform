@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}AI Test Design - Audio Test Platform{% endblock %}
+
+{% block content %}
+  <section class="page-heading">
+    <div>
+      <p class="eyebrow">draft generation with human control</p>
+      <h1>AI Test Design</h1>
+      <p class="text-muted mb-0">
+        Human review required: generated content remains a draft until a
+        tester explicitly accepts it.
+      </p>
+    </div>
+    <a class="btn btn-primary" href="{{ url_for('ai_test_design.create') }}">New design session</a>
+  </section>
+
+  <section class="panel mb-4">
+    <form method="get" class="row g-3 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label" for="project_id">Project</label>
+        <select class="form-select" id="project_id" name="project_id">
+          <option value="">All projects</option>
+          {% for project in projects %}
+            <option value="{{ project.id }}" {% if filters.project_id|string == project.id|string %}selected{% endif %}>{{ project.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label" for="version_id">Version</label>
+        <select class="form-select" id="version_id" name="version_id">
+          <option value="">All versions</option>
+          {% for version in versions %}
+            <option value="{{ version.id }}" {% if filters.version_id|string == version.id|string %}selected{% endif %}>{{ version.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label" for="status">Status</label>
+        <select class="form-select" id="status" name="status">
+          <option value="">All statuses</option>
+          {% for status in statuses %}
+            <option value="{{ status }}" {% if filters.status == status %}selected{% endif %}>{{ status }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label" for="provider">Provider</label>
+        <select class="form-select" id="provider" name="provider">
+          <option value="">All providers</option>
+          {% for provider in providers %}
+            <option value="{{ provider }}" {% if filters.provider == provider %}selected{% endif %}>{{ provider }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <button class="btn btn-outline-primary w-100" type="submit">Filter</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th>Project / Version</th>
+            <th>Provider</th>
+            <th>Status</th>
+            <th>Quality</th>
+            <th>Drafts</th>
+            <th>Created</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td class="fw-semibold">{{ row.session.title }}</td>
+              <td>{{ row.session.project.name }} / {{ row.session.version.name }}</td>
+              <td>{{ row.session.provider }}</td>
+              <td><span class="badge text-bg-secondary">{{ row.session.status }}</span></td>
+              <td>{{ row.session.quality_score }}/100</td>
+              <td>
+                {{ row.total }} total ·
+                {{ row.counts.accepted }} accepted ·
+                {{ row.counts.rejected }} rejected ·
+                {{ row.counts.pending }} pending
+              </td>
+              <td>{{ row.session.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
+              <td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('ai_test_design.detail', session_id=row.session.id) }}">Review</a></td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="8" class="text-center text-muted py-4">
+                No AI Test Design sessions yet.
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

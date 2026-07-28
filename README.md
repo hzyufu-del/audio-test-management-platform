@@ -16,12 +16,12 @@
 
 | 检查项 | 当前结果 |
 | --- | --- |
-| Tests (local) | 506 passed |
-| Coverage (local) | 93.84% |
+| Tests (local) | 622 passed |
+| Coverage (local) | 94.01% |
 | Coverage gate | 90% |
 | Ruff (local) | passed |
 | GitHub Actions | Python 3.12 quality checks passed; Docker not included |
-| Migration check (local) | passed |
+| Migration check (local) | passed (`c5d8a9e4f2b1` head) |
 | Python CI | 3.12 |
 
 ## 业务流程
@@ -112,6 +112,10 @@ erDiagram
     TestCase ||--o{ TestExecution : produces
     TestRun ||--o{ TestExecution : groups
     TestExecution ||--o{ Defect : raises
+    Project ||--o{ TestDesignSession : owns
+    Version ||--o{ TestDesignSession : scopes
+    TestDesignSession ||--|{ TestCaseDraft : proposes
+    TestCaseDraft o|--o| TestCase : accepted_as
 ```
 
 模型通过外键建立关系：TestCase 只保存 `version_id`，TestExecution 只保存 `test_case_id` 和可选的 `test_run_id`；LogFile 保存必填 `project_id` 和可选 `version_id`，不保存原始日志正文或本地文件路径。
@@ -128,6 +132,7 @@ flowchart LR
         Import["JUnitImportService"]
         LogParser["LogTextParser"]
         Workflow["TestCase / Execution / Defect Services"]
+        TestDesign["TestDesignService<br/>Strict Schema / Providers / Scorer"]
     end
 
     Models["SQLAlchemy Models"]
@@ -137,11 +142,13 @@ flowchart LR
     Routes --> Parser
     Routes --> LogParser
     Routes --> Workflow
+    Routes --> TestDesign
     Routes --> Models
     Parser --> Import
     Dashboard --> Models
     Import --> Models
     Workflow --> Models
+    TestDesign --> Models
     Models --> Database
 ```
 
@@ -150,6 +157,10 @@ flowchart LR
 - Dashboard Service 对数据库中的 Project、Version、TestExecution 和 Defect 做聚合，生成指标、趋势、版本质量和关注项。
 - LogTextParser 执行同步、有边界、可重复的纯文本分析；路由只负责 Project / Version 校验和数据库事务。
 - REST API 路由负责 HTTP/JSON 边界，Pydantic Schema 负责字段校验，Workflow Service 负责查询、业务约束和事务。
+
+AI Test Design separates strict schemas, offline/external Providers,
+deterministic local scoring, and the atomic human-acceptance workflow from
+the existing TestCase review assistant.
 
 ## 项目亮点
 
@@ -166,7 +177,7 @@ flowchart LR
 - TestRun 与 TestExecution 在单事务中写入，失败时整批 rollback。
 - Log Analysis V1 不保存上传文件，以 SHA-256、确定性统计和有上限的安全摘要支持复核。
 - REST API V1 提供严格分页、筛选、状态码、Location、快照和安全回滚测试，不实现不完整的 JWT 或 RBAC。
-- 当前本地测试基线为 506 个 pytest，coverage 93.84%。
+- 当前本地测试基线为 622 个 pytest，coverage 94.01%。
 - Ruff 和 GitHub Actions 检查依赖、编译、迁移、模型一致性、测试与 coverage 门槛。
 
 ## 页面截图
@@ -206,6 +217,18 @@ AI 用例质量审查是 TestCase 详情页上的可选旁路能力，只审查�
 - 非法 AI 配置会安全禁用可选审查能力，不会阻止平台核心功能启动或访问。
 
 本地配置项见 [`.env.example`](.env.example)。启用 DeepSeek 前，应在被 Git 忽略的本地 `.env` 中设置 `AI_ENABLED`、`AI_PROVIDER`、`DEEPSEEK_API_KEY` 和 `DEEPSEEK_MODEL`，不要把 `.env` 或任何真实凭据提交到仓库。
+
+## AI Test Design Assistant
+
+The human-reviewed AI Test Design workflow generates structured test points
+and editable TestCase drafts from mock/demo/sample requirements. Drafts never
+become formal TestCases until a tester explicitly accepts them; generation,
+quality scoring, prompt-injection warnings, acceptance, rejection, and rollback
+remain deterministic and testable with the offline Mock Provider.
+
+See [AI Test Design Assistant V1](docs/ai/test_design_assistant.md) for the
+Provider architecture, strict schema, local scoring rules, data boundary,
+human-review transaction, demo flow, and limitations.
 
 ## 快速启动
 

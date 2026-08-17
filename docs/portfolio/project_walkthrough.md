@@ -35,8 +35,10 @@ JUnit XML
 其他能力通过明确边界接入：
 
 - Log Analysis 接收 `.log` 或 `.txt`，在内存中完成确定性分析，只保存元数据和有上限的摘要。
-- AI TestCase Review 是旁路审查。它不生成正式用例，也不自动写数据库。
+- AI TestCase Review 对已有正式 TestCase 做旁路质量审查，只给出改进建议，不直接修改测试资产。
+- AI Test Design Assistant 从 mock、demo 或 sample Requirement 生成结构化测试点和可编辑的 TestCase Draft；只有人工接受后，Draft 才会通过事务创建正式 TestCase。
 - REST API V1 暴露 TestCase、TestExecution 和 Defect 的核心闭环，Web 页面仍可独立使用。
+- Docker Delivery 提供本地可重复部署，GitHub Actions CI 持续验证依赖、代码质量、migration 和测试覆盖率。
 
 ## 3. 技术设计
 
@@ -64,11 +66,24 @@ SQLite 连接会执行 `PRAGMA foreign_keys=ON`。Version code、TestCase code�
 
 原始日志不会落盘或进入数据库。这样做减少了演示项目处理敏感内容的风险，也避免给仓库制造日志生命周期和下载权限问题。
 
-### AI 旁路审查
+### 两条 AI 辅助链路
 
-AI Review 先执行确定性规则，再调用可插拔 Provider，最后通过 Pydantic v2 严格校验结构。额外字段、非法 JSON 和不完整输出都会被拒绝。Provider 只接收字段白名单；数据库 ID、日志、凭据和 JUnit 原文不会进入提示词。
+AI TestCase Review 面向已有正式 TestCase：先执行确定性规则，再调用可插拔 Provider，最后通过 Pydantic v2 严格校验结构。它检查前置条件、步骤、预期结果以及异常和边界场景，只在页面给出改进建议，不直接修改 TestCase。
 
-默认 Provider 是离线 mock，外部 AI 默认关闭。审查结果只在页面展示，不写回 TestCase。
+AI Test Design Assistant 面向受边界约束的 mock、demo 或 sample Requirement：
+
+```text
+Requirement
+→ Structured Test Points
+→ TestCase Drafts
+→ Local Quality Score
+→ Human Edit / Accept / Reject
+→ Formal TestCase
+```
+
+Provider 输出必须先通过严格 Schema 校验，质量分由应用在本地确定性计算。Draft 默认是 pending，测试人员可以编辑、接受或拒绝；只有人工接受后，服务才在同一事务中创建正式 TestCase、更新 Draft 和 Session 状态，失败会整体 rollback。Requirement 始终被当作不可信数据，不能改变 Provider、固定提示词、Schema、评分规则或绕过人工接受。
+
+两条链路默认都可使用离线 mock，外部 AI 默认关闭，CI 不调用真实 DeepSeek。Provider 只接收字段白名单；数据库 ID、日志、凭据、JUnit 原文和本地路径不会进入提示词。AI 辅助测试设计，而不是 AI 替代测试工程师。
 
 ### REST API
 
@@ -96,6 +111,7 @@ Compose 使用 named volume 保存 `/app/instance` 下的 SQLite 数据，并用
 - Service：聚合、解析、导入、业务状态、rollback 和幂等。
 - Route：表单、页面、权限跳转、错误反馈和 HTML 转义。
 - API：状态码、Content-Type、分页、筛选、Location、快照和统一错误格式。
+- AI：Provider 隔离、严格 Schema、本地评分、提示词注入边界、Draft 编辑与接受/拒绝、重复操作和事务 rollback。
 - Migration：从空数据库 upgrade、current、模型漂移，以及需要时的 downgrade/re-upgrade。
 - Security：XXE、二进制日志、超大输入、未知字段、Mass Assignment 和异常信息泄露。
 - Smoke：通过真实 HTTP 串起 TestCase、Execution 和 Defect，不直接操作数据库。
@@ -103,6 +119,8 @@ Compose 使用 named volume 保存 `/app/instance` 下的 SQLite 数据，并用
 - CI：Python 3.12 下执行依赖检查、compileall、Ruff、migration 和 coverage。
 
 Coverage 门槛是 90%。它用来防止明显回退，不代表所有风险都已覆盖；状态机、事务和安全边界仍需要针对性断言。
+
+当前最终基线是 622 个 pytest、最新 CI coverage 94.14%（长期表述为 94%+）、11 个 REST API endpoints，migration head 为 `c5d8a9e4f2b1`。
 
 ## 5. 重点难点
 
@@ -122,9 +140,9 @@ Coverage 门槛是 90%。它用来防止明显回退，不代表所有风险都�
 
 V1 只需要风险统计和复核片段。保存全文会引入敏感数据、存储生命周期、下载权限和删除策略。当前实现只保留文件元数据、SHA-256 和截断摘要，范围更适合本地作品项目。
 
-### 5. 为什么 AI 输出不能直接写正式用例
+### 5. 为什么 AI 生成的 Draft 不能直接写入正式用例
 
-模型输出可能不完整，也可能受到用例文本中的指令干扰。这个项目把 AI 定位为审查提示，结果先经过结构校验，再由人判断。它不修改数据库，核心 CRUD 在 AI 配置错误时仍能运行。
+模型输出可能不完整，也可能受到 Requirement 中指令式文本的干扰。Test Design 先做严格 Schema 校验和本地质量评分，再让测试人员编辑、接受或拒绝。只有 accepted Draft 才能通过单事务创建正式 TestCase；重复编号、状态冲突或数据库错误都会整体 rollback。另一条 AI Review 链路只给已有 TestCase 提建议，始终不写回正式用例。
 
 ### 6. 400、409、415、422 怎样区分
 
@@ -136,6 +154,8 @@ V1 只需要风险统计和复核片段。保存全文会引入敏感数据、�
 
 项目不接入真实公司数据。Log 不保存原文，AI 默认离线，Postman 和 smoke 脚本只创建唯一的 sample 记录。Docker 化解决的是可重复交付，不等于生产部署方案。
 
+AI Test Design 不运行测试、不点击 UI、不使用 Appium 或多模态 UI Agent，也不会自主把 Draft 写入正式测试库。项目没有 Agent 自动执行测试、真实硬件覆盖验证或 CI 中的真实 DeepSeek 调用。
+
 ## 7. 三分钟项目介绍
 
 这个项目是我用 Flask 做的消费电子音频测试管理平台，主要目的是把我理解的测试流程落成一套能运行、能验证的系统。数据全部是 mock 和 sample，不涉及任何公司内部内容。
@@ -144,9 +164,9 @@ V1 只需要风险统计和复核片段。保存全文会引入敏感数据、�
 
 自动化部分支持 JUnit XML 导入。我把 XML 解析和数据库写入拆开：解析器使用 defusedxml，并限制文件大小、节点数量和字段长度；Service 先检查目标 Version 中的用例是否全部匹配，再用报告 SHA-256 做幂等判断。整批记录在一个事务里提交，失败就 rollback。
 
-日志分析没有使用大模型。它按固定规则统计 error、warning 等级，识别音频、连接和电源领域，只保存摘要，不保存原始日志。AI 功能也不是生成用例，而是对已有 TestCase 做旁路质量审查。默认使用离线 mock，输出必须通过 Pydantic 校验，而且不会写回数据库。
+日志分析没有使用大模型。它按固定规则统计 error、warning 等级，识别音频、连接和电源领域，只保存摘要，不保存原始日志。项目中 AI 有两条独立能力链路：AI TestCase Review 对已有正式用例做旁路质量审查，不自动修改测试资产；AI Test Design Assistant 根据 mock、demo 或 sample Requirement 生成结构化测试点和 TestCase Draft，经过严格 Schema 校验和本地质量评分后，仍需测试人员编辑、接受或拒绝，只有 accepted Draft 才通过事务创建正式 TestCase。
 
-REST API 覆盖 TestCase、Execution 和 Defect 闭环，明确区分 400、409、415 和 422。测试包括 Model、Service、Route、API、Migration、安全输入和 rollback，CI 有 90% coverage 门槛。
+REST API 用 11 个 endpoints 覆盖 TestCase、Execution 和 Defect 闭环，明确区分 400、409、415 和 422。测试包括 Model、Service、Route、API、Migration、AI、安全输入和 rollback。当前最终基线是 622 个 pytest，最新 CI coverage 94.14%，migration head 是 `c5d8a9e4f2b1`。
 
 交付方面，我补了非 root Docker 镜像、自动 migration 和可控 demo seed，还提供 Python、PowerShell smoke 以及 Postman Collection。面试演示时，我会先展示 Dashboard 和 JUnit 导入，再用 smoke 脚本证明 API 闭环。这个项目的边界也很清楚：它是单机求职 demo，不把 SQLite、无认证 API 或同步任务包装成生产方案。
 
@@ -188,9 +208,9 @@ Service 捕获数据库异常并 rollback。API 返回统一、安全的错误�
 
 当前目标是可重复的基础分析。固定规则更容易解释、测试和复现，也不会把可能敏感的日志发送到外部服务。
 
-### 10. AI Review 如何防止脏数据进入系统
+### 10. 两条 AI 链路如何防止脏数据进入系统
 
-它不写数据库。输入使用字段白名单，输出通过 Pydantic `extra="forbid"` 校验。非法配置或 Provider 失败只会关闭旁路能力。
+AI Review 不写数据库；输入使用字段白名单，输出通过 Pydantic `extra="forbid"` 校验。AI Test Design 还会对 Provider 输出做严格 Schema 校验和本地质量评分，Draft 默认 pending；只有人工接受才能触发正式 TestCase、Draft 和 Session 状态的原子事务，拒绝或失败都不会创建正式用例。
 
 ### 11. REST API 为什么不用统一返回 200
 

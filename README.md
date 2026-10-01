@@ -252,7 +252,7 @@ flask --app run.py run
 FLASK_APP=run.py
 FLASK_DEBUG=1
 SECRET_KEY=replace-with-local-secret
-DATABASE_URI=sqlite:///instance/audio_test_platform.sqlite
+DATABASE_URI=sqlite:///audio_test_platform.sqlite
 ```
 
 `SECRET_KEY` 只是本地占位值，复制为 `.env` 后应替换；不要用于公网或生产环境。
@@ -290,7 +290,7 @@ http://127.0.0.1:5000/api/v1/health
 docker compose down -v
 ```
 
-Compose 会把容器数据库固定到 `/app/instance/audio_test_platform.sqlite`，并挂载 named volume。`.env.example` 中的 `sqlite:///instance/audio_test_platform.sqlite` 供本机 Flask 启动使用，Compose 会显式覆盖为容器内绝对路径。
+Compose 会把容器数据库固定到 `/app/instance/audio_test_platform.sqlite`，并挂载 named volume。`.env.example` 中的 `sqlite:///audio_test_platform.sqlite` 由 Flask-SQLAlchemy 相对于 Flask 的 `instance` 目录解析，本机实际文件为 `instance/audio_test_platform.sqlite`；Compose 会显式覆盖为容器内绝对路径。
 
 容器使用 Gunicorn，由非 root 用户运行。默认 `AI_ENABLED=false`、`AI_PROVIDER=mock`，不会调用外部 AI Provider。
 

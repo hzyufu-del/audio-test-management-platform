@@ -52,6 +52,8 @@
 
 Pilot 数据集和选中需求均限制为 1～3 条 `PILOT_*` 需求，每条每种方法恰好 1 次，最多 6 次尝试；现有材料默认 4 次。正式 `REQ_*` 数据无法作为 Pilot 输入。模型调用均为非流式、关闭 thinking、不发送 temperature、SDK `max_retries=0`。目录默认位于 `experiment/pilot_runs/`；`--output-dir` 也必须指定该目录下一个尚不存在的子目录。
 
+Pilot 数据版本只接受独立一致的 `pilot-v1` 或 `pilot-v2`，拒绝混合或未知版本。新 Pilot-v2 通过 `--dataset-dir` 指定新材料；计划、调用前 manifest、逐次记录及 summary 明确标记 `pilot_version=pilot-v2`，不把新材料登记成 v1。历史 v1 材料和已有运行保持原状；该版本支持不授权额外请求，也不改变每方法一次尝试的限制。
+
 同一请求模型标识并不能保证服务端实际返回模型始终相同。保存 `requested_model` 和有独立响应元数据依据的 `returned_model`；没有依据时后者为 null。现有 `GenerationRun.provider_model` 可能有配置回退，单列保存，不当作实际响应证据。若返回模型不同，需在后续分析中单列并检查对照条件。
 
 ## 4. 两种方法与保存边界

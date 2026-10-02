@@ -15,7 +15,7 @@ RUN python -m pip install --no-cache-dir --upgrade pip \
 
 COPY app /app/app
 COPY migrations /app/migrations
-COPY config.py run.py /app/
+COPY config.py run.py test_design_contract.py /app/
 COPY docker/entrypoint.sh /usr/local/bin/app-entrypoint
 
 RUN chmod 755 /usr/local/bin/app-entrypoint \

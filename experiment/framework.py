@@ -27,6 +27,7 @@ REQUIREMENT_FIELDS = {"requirement_id", "dataset_version", "category", "title",
 REFERENCE_FIELDS = {"requirement_id", "point_id", "scenario_type",
                     "trigger_condition", "expected_behavior", "requirement_basis"}
 METHODS = ("baseline", "proposed")
+PILOT_VERSIONS = frozenset({"pilot-v1", "pilot-v2"})
 RESULT_FIELDS = {
     "status", "provider", "requested_model", "provider_model", "returned_model",
     "model_evidence_source", "prompt_version", "prompt_hash", "requirement_hash",
@@ -94,8 +95,10 @@ def load_dataset(directory, *, role):
                     raise ValueError
                 if any(not isinstance(rule, str) or not rule or rule not in body for rule in rules):
                     raise ValueError
-        expected_version = "v1.0" if role == "formal_plan" else "pilot-v1"
-        if versions != {expected_version}:
+        expected_version = "v1.0" if role == "formal_plan" else next(iter(versions), None)
+        if versions != {expected_version} or (
+            role == "pilot" and expected_version not in PILOT_VERSIONS
+        ):
             raise ValueError
         if role == "formal_plan" and (
             len(requirements) != 28 or
@@ -157,6 +160,10 @@ def _source_evidence():
 def build_plan(dataset, *, role, selected_ids=None):
     if role not in {"formal_plan", "pilot"}:
         raise ExperimentError("Unsupported plan role.")
+    version = dataset.get("dataset_version")
+    allowed_versions = {"v1.0"} if role == "formal_plan" else PILOT_VERSIONS
+    if not isinstance(version, str) or version not in allowed_versions:
+        raise ExperimentError("Dataset version does not match the requested plan role.")
     rows = dataset["requirements"]
     requested = list(selected_ids) if selected_ids is not None else [r["requirement_id"] for r in rows]
     if not requested or len(requested) != len(set(requested)):
@@ -195,6 +202,7 @@ def build_plan(dataset, *, role, selected_ids=None):
             "execution_mode": "dry_run", "formal_eligible": False,
             "pilot_only": role == "pilot", "formal_experiment": False,
             "dataset_version": dataset["dataset_version"],
+            **({"pilot_version": version} if role == "pilot" else {}),
             "dataset_sha256": dict(dataset["dataset_sha256"]),
             "requirements": planned, "tasks": tasks,
             "reference_scenarios": [p for p in dataset["reference_scenarios"]
@@ -276,7 +284,11 @@ def _validate_pilot_plan(plan):
         rows = plan["requirements"]
         if not isinstance(rows, list) or not 1 <= len(rows) <= 3:
             raise ValueError
-        if plan["dataset_version"] != "pilot-v1" or plan["formal_eligible"] is not False:
+        version = plan["dataset_version"]
+        if version not in PILOT_VERSIONS or plan["formal_eligible"] is not False:
+            raise ValueError
+        # Historical v1 plans predate this explicit tag; v2 must declare it.
+        if plan.get("pilot_version", version if version == "pilot-v1" else None) != version:
             raise ValueError
         ids, tasks = set(), []
         for index, row in enumerate(rows):
@@ -327,6 +339,8 @@ def execute_pilot(plan, output_dir, adapter_factory, settings, *,
     manifest = {k: v for k, v in plan.items() if k != "reference_scenarios"}
     manifest.update(execution_mode=execution_mode, sample_role="pilot", formal_eligible=False,
                     pilot_only=True, formal_experiment=False,
+                    pilot_version=plan["dataset_version"],
+                    prompt_version=plan["prompt_versions"]["proposed"],
                     pilot_base_commit=plan["source_evidence"]["git_head"],
                     experiment_id=output.name, parameters=parameters,
                     safety_policy_version="existing-test-design-security",
@@ -356,6 +370,7 @@ def execute_pilot(plan, output_dir, adapter_factory, settings, *,
                     "requirement_id": task["requirement_id"], "method": task["method"],
                     "sequence_no": task["sequence_no"], "attempt_no": 1,
                     "requirement_hash": task["requirement_hash"],
+                    "pilot_version": plan["dataset_version"],
                     "dataset_version": plan["dataset_version"]}
             started = {**tags, "status": "started",
                        "started_at": datetime.now(timezone.utc).isoformat(),
@@ -413,6 +428,7 @@ def execute_pilot(plan, output_dir, adapter_factory, settings, *,
         summary = {"sample_role": "pilot", "execution_mode": execution_mode,
                    "formal_eligible": False, "planned_attempts": len(plan["tasks"]),
                    "pilot_only": True, "formal_experiment": False,
+                   "pilot_version": plan["dataset_version"],
                    "pilot_base_commit": manifest["pilot_base_commit"],
                    "recorded_outcomes": sum(outcomes.values()),
                    **{name: outcomes[name] for name in ("succeeded", "failed", "pre_call_failed", "running", "unresolved")},

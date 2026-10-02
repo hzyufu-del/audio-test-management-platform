@@ -1,9 +1,12 @@
 import importlib.util
 import io
 import json
+import os
 import re
+import shlex
 import shutil
 import subprocess
+import sys
 import threading
 import time
 from contextlib import contextmanager, suppress
@@ -98,6 +101,57 @@ def test_dockerfile_uses_python_312_and_a_non_root_runtime_user():
     assert any(line.startswith("USER ") and line != "USER root" for line in lines)
     assert '"run:app"' in dockerfile
     assert "gunicorn" in dockerfile
+
+
+def test_docker_copied_files_can_import_test_design_prompt_dependencies(tmp_path):
+    """Check real imports from Docker's copied files without building an image."""
+    image_root = tmp_path / "image"
+    image_root.mkdir()
+    for line in read_text("Dockerfile").splitlines():
+        if not line.startswith("COPY "):
+            continue
+        *sources, destination = shlex.split(line)[1:]
+        if not destination.startswith("/app/"):
+            continue
+        for relative_path in sources:
+            source = ROOT / relative_path
+            target = image_root / destination.removeprefix("/app/")
+            if destination.endswith("/") or len(sources) > 1:
+                target /= source.name
+            if source.is_dir():
+                shutil.copytree(
+                    source, target,
+                    ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+                )
+            else:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, target)
+
+    code = """
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1]).resolve()
+sys.path.insert(0, str(root))
+from app.services.test_design import prompts
+import test_design_contract
+
+assert Path(test_design_contract.__file__).parent == root
+assert prompts.PROMPT_VERSION == test_design_contract.PROMPT_VERSION
+print('Docker prompt dependencies import successfully')
+"""
+    result = subprocess.run(
+        [sys.executable, "-I", "-B", "-c", code, str(image_root)],
+        cwd=image_root,
+        env={
+            **os.environ, "AI_ENABLED": "false", "AI_PROVIDER": "mock",
+            "DEEPSEEK_API_KEY": "", "SECRET_KEY": "demo-docker-import-fixture",
+            "DATABASE_URI": "sqlite:///:memory:",
+        },
+        capture_output=True, text=True, encoding="utf-8", timeout=30, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "Docker prompt dependencies import successfully"
 
 
 def test_compose_configures_persistent_demo_service_and_healthcheck():

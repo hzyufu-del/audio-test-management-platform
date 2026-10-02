@@ -109,6 +109,130 @@ def settings():
             "execute": True, "ai_enabled": True}
 
 
+def pilot_copy(directory, versions=("pilot-v2", "pilot-v2")):
+    """Temporary historical Pilot format; never use real run inputs."""
+    directory.mkdir()
+    rows = [json.loads(line) for line in
+            (PILOT / "requirements.jsonl").read_text(encoding="utf-8").splitlines()]
+    for row, version in zip(rows, versions, strict=True):
+        row["dataset_version"] = version
+    (directory / "requirements.jsonl").write_text(
+        "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows),
+        encoding="utf-8", newline="\n",
+    )
+    (directory / "reference_scenarios.jsonl").write_bytes(
+        (PILOT / "reference_scenarios.jsonl").read_bytes())
+    return directory
+
+
+def test_pilot_v2_dataset_loads_without_changing_historical_pilot(tmp_path):
+    module = framework()
+    historical = {path.name: path.read_bytes() for path in PILOT.glob("*.jsonl")}
+    dataset = module.load_dataset(pilot_copy(tmp_path / "input"), role="pilot")
+    assert dataset["dataset_version"] == "pilot-v2"
+    assert len(dataset["requirements"]) == 2
+    assert len(dataset["reference_scenarios"]) == 12
+    assert {path.name: path.read_bytes() for path in PILOT.glob("*.jsonl")} == historical
+    assert module.load_dataset(PILOT, role="pilot")["dataset_version"] == "pilot-v1"
+
+
+def test_pilot_v2_plan_has_four_immutable_alternating_attempts():
+    module = framework()
+    dataset = module.load_dataset(PILOT, role="pilot")
+    dataset["dataset_version"] = "pilot-v2"
+    plan = module.build_plan(dataset, role="pilot")
+    assert plan["pilot_version"] == plan["dataset_version"] == "pilot-v2"
+    assert plan["prompt_versions"] == {
+        "baseline": "baseline-v1", "proposed": "test-design-v3"}
+    assert [task["method"] for task in plan["tasks"]] == [
+        "baseline", "proposed", "proposed", "baseline"]
+    assert [task["sequence_no"] for task in plan["tasks"]] == [1, 2, 3, 4]
+    assert all(task["attempt_no"] == 1 for task in plan["tasks"])
+    for first, second in zip(plan["tasks"][::2], plan["tasks"][1::2]):
+        assert first["input"] == second["input"]
+        assert set(first["input"]) == {"title", "requirement_text"}
+
+
+def test_pilot_v2_manifest_is_saved_before_calls_and_versions_reach_all_artifacts(tmp_path):
+    module = framework()
+    dataset = module.load_dataset(PILOT, role="pilot")
+    dataset["dataset_version"] = "pilot-v2"
+    plan = module.build_plan(dataset, role="pilot")
+    # Explicit metadata tests execution independently of the builder assertion.
+    plan["pilot_version"] = "pilot-v2"
+    calls = []
+    output = tmp_path / "pilot-v2"
+
+    def factory(directory, config):
+        assert not calls
+        manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["pilot_version"] == manifest["dataset_version"] == "pilot-v2"
+        assert manifest["prompt_versions"]["proposed"] == "test-design-v3"
+        assert manifest.get("prompt_version") == "test-design-v3"
+        return fake_factory(calls)(directory, config)
+
+    summary = module.execute_pilot(plan, output, factory, settings(), execute=True,
+                                   execution_mode="offline_fixture")
+    assert len(calls) == summary["planned_attempts"] == summary["succeeded"] == 4
+    assert [method for _, method, _, _ in calls] == [
+        "baseline", "proposed", "proposed", "baseline"]
+    artifacts = [json.loads(path.read_text(encoding="utf-8"))
+                 for path in sorted(output.rglob("*.json"))]
+    assert len(artifacts) == 10
+    for artifact in [summary, *artifacts]:
+        assert artifact["pilot_version"] == "pilot-v2"
+        assert artifact["formal_eligible"] is False
+        assert artifact["formal_experiment"] is False
+
+
+@pytest.mark.parametrize("versions", [
+    ("pilot-v1", "pilot-v2"), ("pilot-v2", "pilot-v3"),
+    ("pilot-v3", "pilot-v3"), ("v1.0", "v1.0"),
+])
+def test_pilot_dataset_rejects_mixed_unknown_and_formal_versions(tmp_path, versions):
+    module = framework()
+    with pytest.raises(module.ExperimentError):
+        module.load_dataset(pilot_copy(tmp_path / "input", versions), role="pilot")
+
+
+@pytest.mark.parametrize("version", ["pilot-v3", "v1.0", None])
+def test_pilot_plan_rejects_unknown_and_formal_dataset_versions(version):
+    module = framework()
+    dataset = module.load_dataset(PILOT, role="pilot")
+    dataset["dataset_version"] = version
+    with pytest.raises(module.ExperimentError):
+        module.build_plan(dataset, role="pilot")
+
+
+@pytest.mark.parametrize("pilot_version", [None, "pilot-v1", "pilot-v3"])
+def test_pilot_v2_rejects_missing_or_conflicting_version_before_calls(tmp_path, pilot_version):
+    module = framework()
+    plan = module.build_plan(module.load_dataset(PILOT, role="pilot"), role="pilot")
+    plan["dataset_version"] = "pilot-v2"
+    if pilot_version is None:
+        plan.pop("pilot_version", None)
+    else:
+        plan["pilot_version"] = pilot_version
+    calls = []
+    with pytest.raises(module.ExperimentError):
+        module.execute_pilot(plan, tmp_path / "pilot", fake_factory(calls), settings(),
+                             execute=True, execution_mode="offline_fixture")
+    assert not calls and not (tmp_path / "pilot").exists()
+
+
+def test_pilot_v1_historical_plan_shape_keeps_v1_execution_metadata(tmp_path):
+    module = framework()
+    plan = module.build_plan(module.load_dataset(PILOT, role="pilot"), role="pilot")
+    assert plan["pilot_version"] == "pilot-v1"
+    plan.pop("pilot_version")
+    output = tmp_path / "pilot-v1"
+    summary = module.execute_pilot(plan, output, fake_factory([]), settings(), execute=True,
+                                   execution_mode="offline_fixture")
+    assert summary["pilot_version"] == "pilot-v1"
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["pilot_version"] == manifest["dataset_version"] == "pilot-v1"
+
+
 @pytest.mark.parametrize("mutation", ["extra_task", "different_input", "unsafe_id"])
 def test_tampered_pilot_plan_is_rejected_before_output_or_factory(tmp_path, mutation):
     module = framework()

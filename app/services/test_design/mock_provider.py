@@ -1,6 +1,8 @@
 import hashlib
+import json
 
-from .provider import TestDesignProvider
+from .prompts import build_test_design_messages
+from .provider import GenerationMetadata, TestDesignProvider
 from .schemas import (
     CaseType,
     Priority,
@@ -109,6 +111,10 @@ class MockTestDesignProvider(TestDesignProvider):
     is_demo = True
 
     def generate(self, context: TestDesignContext) -> TestDesignResult:
+        self.last_call_metadata = None
+        messages = build_test_design_messages(context)
+        input_chars = sum(len(item["content"]) for item in messages)
+        self.last_call_metadata = GenerationMetadata(input_chars=input_chars)
         normalized = (
             f"{context.title}\n{context.requirement_text}".casefold()
         )
@@ -175,7 +181,7 @@ class MockTestDesignProvider(TestDesignProvider):
                 )
             )
 
-        return TestDesignResult(
+        result = TestDesignResult(
             summary=(
                 f"Demo AI Design for a sample {domain} requirement. "
                 "The output is deterministic and remains a human-reviewed "
@@ -188,6 +194,17 @@ class MockTestDesignProvider(TestDesignProvider):
                 "Mock results do not confirm behavior on a real device.",
             ],
         )
+        output = json.dumps(
+            result.model_dump(mode="json"),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        self.last_call_metadata = GenerationMetadata(
+            input_chars=input_chars,
+            output_chars=len(output),
+        )
+        return result
 
     @staticmethod
     def _domain(text):

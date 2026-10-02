@@ -128,6 +128,7 @@ def test_models_expose_required_columns_relationships_and_constraints(app):
         assert draft_columns == {
             "id",
             "session_id",
+            "generation_run_id",
             "suggested_code",
             "title",
             "module",

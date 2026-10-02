@@ -115,6 +115,10 @@ erDiagram
     Project ||--o{ TestDesignSession : owns
     Version ||--o{ TestDesignSession : scopes
     TestDesignSession ||--|{ TestCaseDraft : proposes
+    TestDesignSession |o--o{ GenerationRun : traces
+    GenerationRun |o--o{ TestCaseDraft : sources
+    TestCaseDraft ||--o{ ReviewRecord : reviews
+    User ||--o{ ReviewRecord : attributes
     TestCaseDraft o|--o| TestCase : accepted_as
 ```
 
@@ -229,6 +233,12 @@ remain deterministic and testable with the offline Mock Provider.
 See [AI Test Design Assistant V1](docs/ai/test_design_assistant.md) for the
 Provider architecture, strict schema, local scoring rules, data boundary,
 human-review transaction, demo flow, and limitations.
+
+第二阶段增加 `GenerationRun` 调用证据和 `ReviewRecord` 审核历史。
+Draft 的 edit / accept / reject 要求登录；模型调用保存安全结构化快照、
+Prompt/Requirement hash、耗时及实际返回的 usage，不保存原始响应或凭据。
+实施结果和真实 Smoke 边界见
+[LLM 实验数据基础报告](docs/llm-experiment-foundation-2026-10-01.md)。
 
 ## 快速启动
 

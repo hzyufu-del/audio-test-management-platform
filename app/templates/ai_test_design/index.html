@@ -70,7 +70,7 @@
             <th>Status</th>
             <th>Quality</th>
             <th>Drafts</th>
-            <th>Created</th>
+            <th>Created (UTC)</th>
             <th></th>
           </tr>
         </thead>
@@ -102,4 +102,24 @@
       </table>
     </div>
   </section>
+
+  {% if orphan_runs %}
+    <section class="panel mt-4">
+      <div class="panel-header"><h2>Calls without a design session</h2></div>
+      <p class="text-muted small">These calls retained generation evidence before a design session was saved.</p>
+      <div class="d-grid gap-3">
+        {% for run in orphan_runs %}
+          <article class="border rounded p-3 text-break">
+            <div class="d-flex flex-wrap justify-content-between gap-2">
+              <h3 class="h6 mb-1">{{ run.title }}</h3>
+              <span class="badge text-bg-secondary">{{ run.status }}</span>
+            </div>
+            <p class="small text-muted mb-1">{{ run.project.name }} / {{ run.version.name }} · {{ run.provider }}{% if run.provider_model %} / {{ run.provider_model }}{% endif %} · {{ run.prompt_version }}</p>
+            <p class="small text-muted mb-1">Call #{{ run.id }} · Started {{ run.started_at.strftime("%Y-%m-%d %H:%M:%S") }} UTC</p>
+            {% if run.error_message %}<p class="small text-danger mb-0">{{ run.error_message }}</p>{% endif %}
+          </article>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
 {% endblock %}

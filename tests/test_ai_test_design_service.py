@@ -1,6 +1,7 @@
 from copy import deepcopy
 
 import pytest
+from flask_login import login_user
 from pydantic import ValidationError
 from sqlalchemy.exc import OperationalError
 
@@ -12,6 +13,7 @@ from app.models import (
     TestCaseDraft as ModelTestCaseDraft,
     TestDesignSession as ModelTestDesignSession,
     Version,
+    User,
 )
 from app.services.ai.exceptions import (
     AIProviderError,
@@ -40,7 +42,14 @@ def app(tmp_path):
     )
     with app.app_context():
         db.create_all()
-    yield app
+        reviewer = User(username="Demo reviewer", email="reviewer@example.test")
+        reviewer.set_password("demo-review-password")
+        db.session.add(reviewer)
+        db.session.commit()
+        reviewer_id = reviewer.id
+    with app.test_request_context():
+        login_user(db.session.get(User, reviewer_id))
+        yield app
     with app.app_context():
         db.session.remove()
         db.drop_all()
@@ -385,7 +394,7 @@ def test_success_persists_validated_session_and_all_drafts_atomically(
         assert session.status == "generated"
         assert session.provider == "mock"
         assert session.provider_model is None
-        assert session.prompt_version == PROMPT_VERSION == "test-design-v1"
+        assert session.prompt_version == PROMPT_VERSION == "test-design-v2"
         assert session.quality_score == 100
         assert len(session.drafts) >= 3
         assert {item.status for item in session.drafts} == {"pending"}

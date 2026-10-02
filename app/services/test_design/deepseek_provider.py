@@ -1,4 +1,3 @@
-import json
 from urllib.parse import urlsplit
 
 from openai import (
@@ -17,8 +16,8 @@ from app.services.ai.exceptions import (
     AIResponseError,
 )
 
-from .prompts import TEST_DESIGN_SYSTEM_PROMPT
-from .provider import TestDesignProvider
+from .prompts import build_test_design_messages
+from .provider import GenerationMetadata, TestDesignProvider
 from .schemas import TestDesignContext, TestDesignResult
 
 
@@ -51,26 +50,21 @@ class DeepSeekTestDesignProvider(TestDesignProvider):
             api_key=self.api_key,
             base_url=self.base_url,
             timeout=self.timeout_seconds,
-            max_retries=1,
+            max_retries=0,
         )
 
     def generate(self, context: TestDesignContext) -> TestDesignResult:
-        user_content = json.dumps(
-            context.model_dump(mode="json"),
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
+        self.last_call_metadata = None
+        messages = build_test_design_messages(context)
+        input_chars = sum(len(item["content"]) for item in messages)
+        self.last_call_metadata = GenerationMetadata(
+            input_chars=input_chars,
+            max_tokens=self.max_output_tokens,
         )
         try:
             response = self.client.chat.completions.create(
                 model=self.provider_model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": TEST_DESIGN_SYSTEM_PROMPT,
-                    },
-                    {"role": "user", "content": user_content},
-                ],
+                messages=messages,
                 response_format={"type": "json_object"},
                 max_tokens=self.max_output_tokens,
                 stream=False,
@@ -97,6 +91,11 @@ class DeepSeekTestDesignProvider(TestDesignProvider):
                 "AI test design is temporarily unavailable."
             ) from None
 
+        self.last_call_metadata = self._response_metadata(response, input_chars)
+        if self.last_call_metadata.finish_reason == "length":
+            raise AIResponseError(
+                "AI test design reached its output limit. No draft was saved."
+            ) from None
         content = self._response_content(response)
         try:
             return TestDesignResult.model_validate_json(
@@ -106,6 +105,23 @@ class DeepSeekTestDesignProvider(TestDesignProvider):
             raise AIResponseError(
                 "AI test design output failed strict schema validation."
             ) from None
+
+    def _response_metadata(self, response, input_chars):
+        usage = getattr(response, "usage", None)
+        choices = getattr(response, "choices", None)
+        choice = choices[0] if choices else None
+        message = getattr(choice, "message", None)
+        content = getattr(message, "content", None)
+        return GenerationMetadata(
+            provider_model=getattr(response, "model", None),
+            prompt_tokens=getattr(usage, "prompt_tokens", None),
+            completion_tokens=getattr(usage, "completion_tokens", None),
+            total_tokens=getattr(usage, "total_tokens", None),
+            finish_reason=getattr(choice, "finish_reason", None),
+            max_tokens=self.max_output_tokens,
+            input_chars=input_chars,
+            output_chars=len(content) if isinstance(content, str) else None,
+        )
 
     @staticmethod
     def _validate_base_url(base_url):

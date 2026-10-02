@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from flask_login import UserMixin
+from sqlalchemy import event, inspect, select
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .extensions import db
@@ -16,6 +17,13 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
+
+    review_records = db.relationship(
+        "ReviewRecord",
+        back_populates="reviewer",
+        passive_deletes="all",
+        lazy=True,
+    )
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -46,6 +54,12 @@ class Project(db.Model):
     test_design_sessions = db.relationship(
         "TestDesignSession",
         back_populates="project",
+        lazy=True,
+    )
+    generation_runs = db.relationship(
+        "GenerationRun",
+        back_populates="project",
+        passive_deletes="all",
         lazy=True,
     )
 
@@ -81,6 +95,12 @@ class Version(db.Model):
     test_design_sessions = db.relationship(
         "TestDesignSession",
         back_populates="version",
+        lazy=True,
+    )
+    generation_runs = db.relationship(
+        "GenerationRun",
+        back_populates="version",
+        passive_deletes="all",
         lazy=True,
     )
 
@@ -173,8 +193,7 @@ class TestCase(db.Model):
 class TestDesignSession(db.Model):
     __table_args__ = (
         db.CheckConstraint(
-            "status IN "
-            "('generated', 'partially_reviewed', 'accepted', 'rejected')",
+            "status IN ('generated', 'partially_reviewed', 'accepted', 'rejected')",
             name="ck_test_design_session_status",
         ),
         db.CheckConstraint(
@@ -235,6 +254,12 @@ class TestDesignSession(db.Model):
         passive_deletes=True,
         lazy=True,
     )
+    generation_runs = db.relationship(
+        "GenerationRun",
+        back_populates="session",
+        passive_deletes="all",
+        lazy=True,
+    )
 
     def __repr__(self):
         return f"<TestDesignSession {self.title}>"
@@ -273,6 +298,12 @@ class TestCaseDraft(db.Model):
         nullable=False,
         index=True,
     )
+    generation_run_id = db.Column(
+        db.Integer,
+        db.ForeignKey("generation_run.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
     suggested_code = db.Column(db.String(80), nullable=False)
     title = db.Column(db.String(200), nullable=False)
     module = db.Column(db.String(80), nullable=False)
@@ -305,6 +336,13 @@ class TestCaseDraft(db.Model):
     )
 
     session = db.relationship("TestDesignSession", back_populates="drafts")
+    generation_run = db.relationship("GenerationRun", back_populates="drafts")
+    review_records = db.relationship(
+        "ReviewRecord",
+        back_populates="draft",
+        passive_deletes="all",
+        lazy=True,
+    )
     accepted_test_case = db.relationship(
         "TestCase",
         back_populates="accepted_draft",
@@ -313,6 +351,161 @@ class TestCaseDraft(db.Model):
 
     def __repr__(self):
         return f"<TestCaseDraft {self.suggested_code}:{self.status}>"
+
+
+class GenerationRun(db.Model):
+    __table_args__ = (
+        db.CheckConstraint(
+            "status IN ('running', 'succeeded', 'failed')",
+            name="ck_generation_run_status",
+        ),
+        db.CheckConstraint(
+            "provider IN ('mock', 'deepseek')",
+            name="ck_generation_run_provider",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    session_id = db.Column(
+        db.Integer,
+        db.ForeignKey("test_design_session.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("project.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    version_id = db.Column(
+        db.Integer,
+        db.ForeignKey("version.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    title = db.Column(db.String(200), nullable=False)
+    requirement_text = db.Column(db.Text, nullable=False)
+    provider = db.Column(db.String(30), nullable=False, index=True)
+    provider_model = db.Column(db.String(120))
+    prompt_version = db.Column(db.String(40), nullable=False)
+    prompt_hash = db.Column(db.String(64), nullable=False)
+    requirement_hash = db.Column(db.String(64), nullable=False)
+    status = db.Column(db.String(30), default="running", nullable=False, index=True)
+    # Use the observed state in the UPDATE predicate. Mapper event checks alone
+    # leave a race between their SELECT and the actual write.
+    __mapper_args__ = {"version_id_col": status, "version_id_generator": False}
+    started_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
+    finished_at = db.Column(db.DateTime(timezone=True))
+    latency_ms = db.Column(db.Integer)
+    input_chars = db.Column(db.Integer)
+    output_chars = db.Column(db.Integer)
+    prompt_tokens = db.Column(db.Integer)
+    completion_tokens = db.Column(db.Integer)
+    total_tokens = db.Column(db.Integer)
+    finish_reason = db.Column(db.String(80))
+    temperature = db.Column(db.Float)
+    max_tokens = db.Column(db.Integer)
+    error_type = db.Column(db.String(80))
+    error_message = db.Column(db.Text)
+    structured_output_json = db.Column(db.Text)
+    created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
+
+    session = db.relationship("TestDesignSession", back_populates="generation_runs")
+    project = db.relationship("Project", back_populates="generation_runs")
+    version = db.relationship("Version", back_populates="generation_runs")
+    drafts = db.relationship(
+        "TestCaseDraft",
+        back_populates="generation_run",
+        passive_deletes="all",
+        lazy=True,
+    )
+
+
+class ReviewRecord(db.Model):
+    __table_args__ = (
+        db.CheckConstraint(
+            "action IN ('edit', 'accept', 'reject')",
+            name="ck_review_record_action",
+        ),
+        db.CheckConstraint(
+            "score_before >= 0 AND score_before <= 100",
+            name="ck_review_record_score_before",
+        ),
+        db.CheckConstraint(
+            "score_after >= 0 AND score_after <= 100",
+            name="ck_review_record_score_after",
+        ),
+        db.CheckConstraint(
+            "changed_field_count >= 0 AND changed_field_count <= 9",
+            name="ck_review_record_changed_field_count",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    draft_id = db.Column(
+        db.Integer,
+        db.ForeignKey("test_case_draft.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    reviewer_user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("user.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    action = db.Column(db.String(30), nullable=False)
+    before_snapshot_json = db.Column(db.Text, nullable=False)
+    after_snapshot_json = db.Column(db.Text, nullable=False)
+    score_before = db.Column(db.Integer, nullable=False)
+    score_after = db.Column(db.Integer, nullable=False)
+    changed_fields_json = db.Column(db.Text, nullable=False)
+    changed_field_count = db.Column(db.Integer, nullable=False)
+    comment = db.Column(db.Text)
+    created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
+
+    draft = db.relationship("TestCaseDraft", back_populates="review_records")
+    reviewer = db.relationship("User", back_populates="review_records")
+
+
+@event.listens_for(GenerationRun, "before_update")
+def prevent_terminal_run_update(mapper, connection, target):
+    """Protect ORM flushes; bulk SQL bypasses mapper events by design."""
+    state = inspect(target)
+    if not any(
+        state.attrs[column.key].history.has_changes() for column in mapper.column_attrs
+    ):
+        return
+    persisted_status = connection.scalar(
+        select(GenerationRun.status).where(GenerationRun.id == state.identity[0])
+    )
+    if persisted_status in {"succeeded", "failed"}:
+        raise ValueError("Terminal GenerationRun is immutable.")
+
+
+@event.listens_for(GenerationRun, "before_delete")
+def prevent_terminal_run_delete(_mapper, connection, target):
+    identity = inspect(target).identity[0]
+    persisted_status = connection.scalar(
+        select(GenerationRun.status).where(GenerationRun.id == identity)
+    )
+    if persisted_status in {"succeeded", "failed"}:
+        raise ValueError("Terminal GenerationRun is immutable.")
+
+
+@event.listens_for(ReviewRecord, "before_update")
+def prevent_review_update(mapper, _connection, target):
+    state = inspect(target)
+    if any(
+        state.attrs[column.key].history.has_changes() for column in mapper.column_attrs
+    ):
+        raise ValueError("ReviewRecord is immutable.")
+
+
+@event.listens_for(ReviewRecord, "before_delete")
+def prevent_review_delete(_mapper, _connection, _target):
+    raise ValueError("ReviewRecord is immutable.")
 
 
 class TestExecution(db.Model):

@@ -45,6 +45,12 @@ SENSITIVE_CONTENT_PATTERNS = (
         re.IGNORECASE,
     ),
     re.compile(
+        r"\b(?:authorization|proxy-authorization|x-api-key|"
+        r"request[_ -]?headers?)\s*[\"']?\s*[:=]",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]{8,}", re.IGNORECASE),
+    re.compile(
         r"\bYou are a constrained test design assistant\b",
         re.IGNORECASE,
     ),
@@ -70,8 +76,15 @@ def detect_untrusted_input_risks(requirement_text):
     return []
 
 
-def contains_forbidden_content(value):
+def contains_forbidden_content(value, config=None):
     texts = list(_text_values(value))
+    if config and any(
+        str(config[key]) in text
+        for key in ("DEEPSEEK_API_KEY", "SECRET_KEY")
+        if config.get(key)
+        for text in texts
+    ):
+        return True
     if any(
         pattern.search(text)
         for text in texts

@@ -31,7 +31,7 @@ writes the Session and every Draft in one database transaction.
 TestCase review provider. The context contains only the bounded title and
 untrusted requirement text. It never contains database IDs, credentials,
 local paths, logs, API keys, or internal configuration. The application owns
-the fixed `test-design-v1` prompt version, validation, scoring, persistence,
+the fixed `test-design-v2` prompt version, validation, scoring, persistence,
 and review workflow.
 
 ## Mock and DeepSeek
@@ -79,6 +79,14 @@ model-reported score is neither requested nor trusted.
 
 ## Human review workflow
 
+Editing, accepting and rejecting a Draft now require a signed-in registered
+User. Each successful operation atomically creates an immutable ReviewRecord
+with reviewer identity, before/after content and status, optional safe comment,
+and Session-wide rule-based scores. Nine content fields define edit cost;
+status/link changes do not count as editing. No-op edits count as review actions
+but not content modifications. Legacy sensitive fields are redacted in audit
+snapshots and named in `redacted_fields`; normal content is preserved exactly.
+
 A pending Draft can be edited only through the allowlisted fields:
 suggested code, title, module, priority, case type, scenario type,
 precondition, steps, and expected result. Internal IDs, timestamps, status,
@@ -110,7 +118,7 @@ Requirement Text is always untrusted data. Known instruction-like phrases are
 recorded as a risk warning rather than treated as authority. The fixed provider
 instructions require the model to ignore requests to change rules, reveal a
 prompt or configuration, output credentials, alter the schema, or create
-records. Input cannot select the Provider, change `test-design-v1`, modify
+records. Input cannot select the Provider, change `test-design-v2`, modify
 quality rules, or bypass the human acceptance transaction. Pages do not expose
 the full fixed prompt.
 
@@ -133,12 +141,60 @@ fixed-prompt leakage is rejected.
 ## Failure and rollback
 
 Provider, JSON, or schema failures create no Session. Generation persistence
-uses one transaction for the Session and all Drafts. Acceptance uses one
-transaction for the TestCase and audit link. SQLAlchemy errors trigger rollback
+first commits a running GenerationRun using an independent database session.
+Success uses one transaction for the Session, all Drafts, their source Run,
+and the Run's succeeded state. If business persistence rolls back, the durable
+Run is finalized failed independently; validated safe output remains available
+for diagnosis. Invalid or unsafe responses never enter its structured snapshot.
+Failure before Session creation leaves `session_id` empty and retains safe
+requirement/title/project/version context. Acceptance uses one transaction
+for the TestCase, audit link and ReviewRecord. SQLAlchemy errors trigger rollback
 and are converted to safe user messages; raw Provider content, SQL details,
 configuration, and secrets are not displayed.
 
+Every service generation, including Mock, records provider/model, actual static
+template SHA-256, requirement SHA-256, UTC timestamps and monotonic latency.
+Returned token counters and finish reason are nullable and never estimated.
+SDK retries are disabled so each Run represents a single Provider invocation.
+Raw responses, request headers, credentials, environment dumps and full prompts
+are not persisted. Model metadata is allowlisted and checked for configured
+secrets. ORM guards reject edits/deletes of terminal Runs and all ReviewRecords;
+foreign-key RESTRICT protects their related evidence. Direct database/bulk SQL
+is outside the ORM guard and must not be used to edit experimental evidence.
+
+`generate_for_session(session_id)` appends a new batch while preserving earlier
+drafts/reviews and Run snapshots. The 20-draft Schema limit applies to each
+generated batch; a persisted Session can aggregate multiple validated batches.
+Its quality score describes the entire preserved collection. Seed fixtures
+remain historical demo data and receive no fabricated GenerationRun.
+
+If the database becomes unavailable after a call or the process is terminated,
+the committed Run can remain running; there is no automatic recovery worker.
+Experiment analysis must count these unresolved calls separately from terminal
+success/failure and keep Mock and DeepSeek cohorts distinct.
+
 ## Demo flow
+
+The current `test-design-v2` prompt gives the complete JSON example, all enum
+values, string field types, and concise 3–6 point/draft guidance. The existing
+strict Schema limits are unchanged; historical `test-design-v1` seed and Run
+records are preserved. A `finish_reason=length` response is rejected even if
+its JSON happens to parse, and its returned metadata remains recorded.
+
+For one explicitly authorized real Demo generation check, run:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\llm_generation_smoke.py --project-id 1 --version-id 1 --execute
+```
+
+This script uses a copied configuration with an 8,000 output-token ceiling and
+60-second timeout for this call only. It does not edit `.env` or change the app
+defaults. There is one Provider request and no SDK retry. Success requires a
+unique new matching DeepSeek Run with `succeeded/stop`, strict JSON validation,
+a persisted Session, and matching pending Draft contents and source IDs. It
+reloads the persisted rows and checks prompt/requirement hashes before reporting
+`closed_loop_validated=true`. It does not accept drafts, create formal TestCases,
+run a batch, or start formal experiments. Without `--execute`, no model is called.
 
 1. Open **AI Test Design** and start a Session.
 2. Select the matching mock Project and Version.

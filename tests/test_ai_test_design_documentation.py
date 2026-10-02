@@ -33,6 +33,7 @@ def test_test_design_documentation_covers_architecture_safety_and_demo_flow():
     assert "real company" in content
     assert "does not auto-create" in content
     assert "test-design-v1" in content
+    assert "test-design-v2" in content
 
 
 def test_readme_links_to_test_design_guide_without_copying_full_document():

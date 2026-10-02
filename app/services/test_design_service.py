@@ -1,4 +1,5 @@
 import json
+from time import perf_counter
 
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -7,10 +8,12 @@ from sqlalchemy.orm import joinedload
 from app.extensions import db
 from app.models import (
     Project,
+    GenerationRun,
     TestCase,
     TestCaseDraft,
     TestDesignSession,
     Version,
+    utc_now,
 )
 
 from .ai.exceptions import (
@@ -21,10 +24,21 @@ from .ai.exceptions import (
     AIReviewError,
 )
 from .test_design.deepseek_provider import DeepSeekTestDesignProvider
+from .test_design.evidence import GenerationRecorder, safe_error, safe_metadata
 from .test_design.mock_provider import MockTestDesignProvider
+from .test_design.prompts import PROMPT_VERSION
 from .test_design.quality import score_test_design
+from .test_design.reviews import (
+    ReviewAuthenticationError,
+    ReviewCommentValidationError,
+    build_review_record,
+    draft_snapshot,
+    resolve_reviewer,
+    validate_comment,
+)
 from .test_design.schemas import (
     DraftEditInput,
+    PersistedTestDesignResult,
     TestDesignContext,
     TestDesignResult,
 )
@@ -38,9 +52,6 @@ from .workflow_errors import (
     WorkflowNotFoundError,
     WorkflowPersistenceError,
 )
-
-
-PROMPT_VERSION = "test-design-v1"
 
 
 class TestDesignValidationError(ValueError):
@@ -84,46 +95,80 @@ class TestDesignService:
             )
 
         provider = self.provider or self._create_provider()
-        try:
-            raw_result = provider.generate(context)
-        except AIReviewError:
-            raise
-        except Exception:
-            raise AIProviderError(
-                "AI test design could not be generated. No draft was saved."
-            ) from None
+        return self._generate(context, project.id, version.id, provider)
 
+    def generate_for_session(self, session_id):
+        session = self.get_session(session_id)
+        context = self._validate_context(session.title, session.requirement_text)
+        provider = self.provider or self._create_provider()
+        return self._generate(
+            context, session.project_id, session.version_id, provider, session=session,
+        )
+
+    def _generate(self, context, project_id, version_id, provider, session=None):
+        provider.last_call_metadata = None
+        recorder = GenerationRecorder(self.config)
+        run_id = recorder.start(
+            context=context, project_id=project_id, version_id=version_id,
+            provider=provider, session_id=session.id if session else None,
+        )
+        started = perf_counter()
+        structured_output = None
         try:
+            try:
+                raw_result = provider.generate(context)
+            except AIReviewError as exc:
+                # Providers outside our adapter may use arbitrary exception
+                # messages. Preserve the safe category, never their string.
+                _, message = safe_error(exc)
+                raise type(exc)(message) from None
+            except Exception:
+                raise AIProviderError(
+                    "AI test design could not be generated. No draft was saved."
+                ) from None
             result = TestDesignResult.model_validate(raw_result)
+            if (
+                contains_forbidden_content(result, config=self.config)
+                or not contains_demo_scope(result)
+            ):
+                raise AIResponseError(
+                    "AI test design output failed safety validation."
+                )
+
+            risks = detect_untrusted_input_risks(context.requirement_text)
+            if risks:
+                payload = result.model_dump(mode="json")
+                payload["limitations"] = _unique_strings(
+                    [*risks, *result.limitations]
+                )[:8]
+                result = TestDesignResult.model_validate(payload)
+            assessment = score_test_design(result, risk_warnings=risks)
+            structured_output = _dump_json(result.model_dump(mode="json"))
         except ValidationError:
+            recorder.fail(
+                run_id, error=AIResponseError("Invalid schema."),
+                metadata=safe_metadata(provider, self.config),
+                latency_ms=max(0, round((perf_counter() - started) * 1000)),
+            )
             raise AIResponseError(
                 "AI test design output failed strict schema validation."
             ) from None
-        if (
-            contains_forbidden_content(result)
-            or not contains_demo_scope(result)
-        ):
-            raise AIResponseError(
-                "AI test design output failed safety validation."
+        except Exception as exc:
+            recorder.fail(
+                run_id, error=exc, metadata=safe_metadata(provider, self.config),
+                latency_ms=max(0, round((perf_counter() - started) * 1000)),
             )
+            raise
 
-        risks = detect_untrusted_input_risks(context.requirement_text)
-        if risks:
-            payload = result.model_dump(mode="json")
-            payload["limitations"] = _unique_strings(
-                [*risks, *result.limitations]
-            )[:8]
-            result = TestDesignResult.model_validate(payload)
-        assessment = score_test_design(result, risk_warnings=risks)
-
-        session = TestDesignSession(
-            project_id=project.id,
-            version_id=version.id,
+        metadata = safe_metadata(provider, self.config)
+        session_values = dict(
+            project_id=project_id,
+            version_id=version_id,
             title=context.title,
             requirement_text=context.requirement_text,
             status="generated",
             provider=provider.provider_name,
-            provider_model=provider.provider_model,
+            provider_model=metadata["provider_model"],
             prompt_version=PROMPT_VERSION,
             quality_score=assessment.quality_score,
             test_points_json=_dump_json(
@@ -134,9 +179,16 @@ class TestDesignService:
             ),
             limitations_json=_dump_json(result.limitations),
         )
-        for draft_data in result.case_drafts:
-            session.drafts.append(
-                TestCaseDraft(
+        try:
+            if session is None:
+                session = TestDesignSession(**session_values)
+                db.session.add(session)
+            else:
+                for name, value in session_values.items():
+                    setattr(session, name, value)
+            for draft_data in result.case_drafts:
+                session.drafts.append(TestCaseDraft(
+                    generation_run_id=run_id,
                     suggested_code=draft_data.suggested_code,
                     title=draft_data.title,
                     module=draft_data.module,
@@ -147,16 +199,29 @@ class TestDesignService:
                     expected_result=draft_data.expected_result,
                     scenario_type=draft_data.scenario_type.value,
                     status="pending",
-                )
-            )
-        db.session.add(session)
-
-        try:
+                ))
+            self._update_session_status(session)
+            session.quality_score = self.assessment_for_session(session).quality_score
+            run = db.session.get(GenerationRun, run_id)
+            run.session = session
+            run.status = "succeeded"
+            run.finished_at = utc_now()
+            run.latency_ms = max(0, round((perf_counter() - started) * 1000))
+            for name, value in metadata.items():
+                if value is not None:
+                    setattr(run, name, value)
+            run.structured_output_json = structured_output
             db.session.commit()
         except SQLAlchemyError as exc:
             db.session.rollback()
+            recorder.fail(
+                run_id, error=WorkflowPersistenceError("Cannot save generation."),
+                metadata=metadata,
+                latency_ms=max(0, round((perf_counter() - started) * 1000)),
+                structured_output_json=structured_output,
+            )
             raise WorkflowPersistenceError(
-                "Test design could not be saved. No data was written."
+                "Test design could not be saved. Call evidence was retained."
             ) from exc
         return session
 
@@ -206,11 +271,14 @@ class TestDesignService:
             raise WorkflowNotFoundError("TestCase Draft does not exist.")
         return draft
 
-    def update_draft(self, draft_id, data):
+    def update_draft(self, draft_id, data, *, reviewer_user_id=None, comment=None):
+        reviewer, comment = self._review_identity(reviewer_user_id, comment)
         draft = self.get_draft(draft_id)
         self._require_pending(draft)
         validated = DraftEditInput.model_validate(data)
         self._require_safe_draft_content(validated)
+        before = draft_snapshot(draft)
+        score_before = self.assessment_for_session(draft.session).quality_score
         draft.suggested_code = validated.suggested_code
         draft.title = validated.title
         draft.module = validated.module
@@ -223,12 +291,18 @@ class TestDesignService:
         draft.session.quality_score = self.assessment_for_session(
             draft.session
         ).quality_score
+        db.session.add(build_review_record(
+            draft, reviewer, "edit", before, score_before,
+            draft.session.quality_score, comment,
+            config=self.config,
+        ))
         self._commit_draft_change(
             "TestCase Draft could not be updated."
         )
         return draft
 
-    def accept_draft(self, draft_id):
+    def accept_draft(self, draft_id, *, reviewer_user_id=None, comment=None):
+        reviewer, comment = self._review_identity(reviewer_user_id, comment)
         draft = self.get_draft(draft_id)
         self._require_pending(draft)
         validated = self._validated_draft(draft)
@@ -245,6 +319,8 @@ class TestDesignService:
             raise WorkflowConflictError(
                 "A TestCase with this code already exists in the Version."
             )
+        before = draft_snapshot(draft)
+        score_before = self.assessment_for_session(draft.session).quality_score
 
         test_case = TestCase(
             version_id=version.id,
@@ -264,6 +340,12 @@ class TestDesignService:
         self._update_session_status(draft.session)
 
         try:
+            db.session.flush()
+            db.session.add(build_review_record(
+                draft, reviewer, "accept", before, score_before,
+                self.assessment_for_session(draft.session).quality_score, comment,
+                config=self.config,
+            ))
             db.session.commit()
         except IntegrityError as exc:
             db.session.rollback()
@@ -277,12 +359,20 @@ class TestDesignService:
             ) from exc
         return test_case
 
-    def reject_draft(self, draft_id):
+    def reject_draft(self, draft_id, *, reviewer_user_id=None, comment=None):
+        reviewer, comment = self._review_identity(reviewer_user_id, comment)
         draft = self.get_draft(draft_id)
         self._require_pending(draft)
+        before = draft_snapshot(draft)
+        score_before = self.assessment_for_session(draft.session).quality_score
         draft.status = "rejected"
         draft.accepted_test_case_id = None
         self._update_session_status(draft.session)
+        db.session.add(build_review_record(
+            draft, reviewer, "reject", before, score_before,
+            self.assessment_for_session(draft.session).quality_score, comment,
+            config=self.config,
+        ))
         self._commit_draft_change(
             "Draft rejection could not be saved."
         )
@@ -290,7 +380,7 @@ class TestDesignService:
 
     @staticmethod
     def session_result(session):
-        return TestDesignResult.model_validate(
+        return PersistedTestDesignResult.model_validate(
             {
                 "summary": (
                     f"Demo AI Design persisted by the {session.provider} "
@@ -356,8 +446,7 @@ class TestDesignService:
             "AI_PROVIDER must be either mock or deepseek."
         )
 
-    @staticmethod
-    def _validate_context(title, requirement_text):
+    def _validate_context(self, title, requirement_text):
         try:
             context = TestDesignContext(
                 title=title,
@@ -368,7 +457,7 @@ class TestDesignService:
                 "Title and Requirement Text must satisfy the bounded form."
             ) from exc
         if contains_forbidden_content(
-            (context.title, context.requirement_text)
+            (context.title, context.requirement_text), config=self.config,
         ):
             raise TestDesignValidationError(
                 "Input contains forbidden sensitive or non-demo content."
@@ -387,8 +476,7 @@ class TestDesignService:
                 "Only a pending TestCase Draft can be changed."
             )
 
-    @staticmethod
-    def _validated_draft(draft):
+    def _validated_draft(self, draft):
         validated = DraftEditInput(
             suggested_code=draft.suggested_code,
             title=draft.title,
@@ -400,19 +488,24 @@ class TestDesignService:
             steps=draft.steps,
             expected_result=draft.expected_result,
         )
-        TestDesignService._require_safe_draft_content(validated)
+        self._require_safe_draft_content(validated)
         return validated
 
-    @staticmethod
-    def _require_safe_draft_content(validated):
+    def _require_safe_draft_content(self, validated):
         if (
-            contains_forbidden_content(validated)
+            contains_forbidden_content(validated, config=self.config)
             or not contains_demo_scope(validated)
         ):
             raise TestDesignValidationError(
                 "Draft content must remain mock/demo/sample-only and cannot "
                 "contain forbidden sensitive content."
             )
+
+    def _review_identity(self, reviewer_user_id, comment):
+        try:
+            return resolve_reviewer(reviewer_user_id), validate_comment(comment, self.config)
+        except (ReviewAuthenticationError, ReviewCommentValidationError) as exc:
+            raise TestDesignValidationError(str(exc)) from None
 
     @staticmethod
     def _update_session_status(session):

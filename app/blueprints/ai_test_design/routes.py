@@ -1,3 +1,5 @@
+import json
+
 from flask import (
     Blueprint,
     current_app,
@@ -7,11 +9,13 @@ from flask import (
     request,
     url_for,
 )
+from flask_login import current_user, login_required
 from pydantic import ValidationError
 
 from app.extensions import db
-from app.models import Project, TestCaseDraft, TestDesignSession, Version
+from app.models import GenerationRun, Project, TestCaseDraft, TestDesignSession, Version
 from app.services.ai.exceptions import AIReviewError
+from app.services.test_design.reviews import review_metrics
 from app.services.test_design.schemas import (
     CaseType,
     Priority,
@@ -78,6 +82,7 @@ def index():
     return render_template(
         "ai_test_design/index.html",
         rows=rows,
+        orphan_runs=_orphan_generation_runs(filters),
         projects=_projects(),
         versions=_versions(),
         filters={
@@ -163,10 +168,20 @@ def detail(session_id):
         test_points=result.test_points,
         limitations=result.limitations,
         assessment=assessment,
+        generation_runs=sorted(session.generation_runs, key=lambda run: run.id),
+        review_history={
+            draft.id: [
+                {"record": record, "changed_fields": json.loads(record.changed_fields_json)}
+                for record in sorted(draft.review_records, key=lambda record: record.id)
+            ]
+            for draft in session.drafts
+        },
+        metrics=review_metrics(session.drafts),
     )
 
 
 @bp.route("/drafts/<int:draft_id>/edit", methods=["GET", "POST"])
+@login_required
 def edit_draft(draft_id):
     draft = db.get_or_404(TestCaseDraft, draft_id)
     errors = []
@@ -176,7 +191,7 @@ def edit_draft(draft_id):
             field: request.form.get(field, "").strip()
             for field in DRAFT_FORM_FIELDS
         }
-        unknown_fields = set(request.form) - DRAFT_FORM_FIELDS
+        unknown_fields = set(request.form) - (DRAFT_FORM_FIELDS | {"comment"})
         if unknown_fields:
             errors.append(
                 "Unknown form field: "
@@ -188,6 +203,8 @@ def edit_draft(draft_id):
                 TestDesignService(current_app.config).update_draft(
                     draft.id,
                     form_data,
+                    reviewer_user_id=current_user.id,
+                    comment=request.form.get("comment"),
                 )
             except ValidationError:
                 errors.append(
@@ -219,13 +236,18 @@ def edit_draft(draft_id):
 
 
 @bp.post("/drafts/<int:draft_id>/accept")
+@login_required
 def accept_draft(draft_id):
     draft = db.get_or_404(TestCaseDraft, draft_id)
     session_id = draft.session_id
     try:
         test_case = TestDesignService(
             current_app.config
-        ).accept_draft(draft.id)
+        ).accept_draft(
+            draft.id,
+            reviewer_user_id=current_user.id,
+            comment=request.form.get("comment"),
+        )
     except ValidationError:
         flash("Draft fields failed strict validation.", "danger")
         return redirect(
@@ -256,12 +278,18 @@ def accept_draft(draft_id):
 
 
 @bp.post("/drafts/<int:draft_id>/reject")
+@login_required
 def reject_draft(draft_id):
     draft = db.get_or_404(TestCaseDraft, draft_id)
     session_id = draft.session_id
     try:
-        TestDesignService(current_app.config).reject_draft(draft.id)
+        TestDesignService(current_app.config).reject_draft(
+            draft.id,
+            reviewer_user_id=current_user.id,
+            comment=request.form.get("comment"),
+        )
     except (
+        TestDesignValidationError,
         WorkflowConflictError,
         WorkflowNotFoundError,
         WorkflowPersistenceError,
@@ -287,6 +315,17 @@ def _versions():
         Version.name,
         Version.id,
     ).all()
+
+
+def _orphan_generation_runs(filters):
+    query = GenerationRun.query.filter(
+        GenerationRun.session_id.is_(None),
+        GenerationRun.status.in_(("running", "failed")),
+    )
+    for field in ("project_id", "version_id", "provider"):
+        if filters[field] is not None and filters[field] != "":
+            query = query.filter(getattr(GenerationRun, field) == filters[field])
+    return query.order_by(GenerationRun.created_at.desc(), GenerationRun.id.desc()).all()
 
 
 def _optional_int(value):

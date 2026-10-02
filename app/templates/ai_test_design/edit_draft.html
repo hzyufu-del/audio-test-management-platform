@@ -65,6 +65,11 @@
         <textarea class="form-control" id="expected_result" name="expected_result" rows="8" maxlength="4000" required>{{ form_data.expected_result }}</textarea>
       </div>
       <div class="col-12">
+        <label class="form-label" for="comment">Review comment (optional)</label>
+        <textarea class="form-control" id="comment" name="comment" rows="3" maxlength="1000"></textarea>
+        <p class="form-text mb-0">Up to 1000 characters. Recorded with your signed-in reviewer identity.</p>
+      </div>
+      <div class="col-12">
         <button class="btn btn-primary" type="submit">Save human edits</button>
       </div>
     </form>

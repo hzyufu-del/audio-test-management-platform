@@ -22,6 +22,13 @@
     does not prove a real device works correctly.
   </div>
 
+  {% if not current_user.is_authenticated %}
+    <div class="alert alert-info" role="note">
+      <a href="{{ url_for('auth.login') }}">Sign in to edit, accept, or reject drafts</a>.
+      Each review is recorded with the signed-in reviewer's identity.
+    </div>
+  {% endif %}
+
   <section class="panel mb-4">
     <div class="panel-header">
       <h2>Requirement Text</h2>
@@ -35,6 +42,7 @@
       <h2>Quality score</h2>
       <span class="fs-4 fw-semibold">{{ assessment.quality_score }}/100</span>
     </div>
+    <p class="text-muted small">Rule-based session quality: this score applies fixed checks to all session drafts.</p>
     <div class="row g-3">
       {% for name, score in assessment.dimension_scores.items() %}
         <div class="col-md-4">
@@ -80,6 +88,45 @@
   </section>
 
   <section class="panel mb-4">
+    <div class="panel-header"><h2>Generation history</h2></div>
+    <div class="d-grid gap-3">
+      {% for run in generation_runs %}
+        <article class="border rounded p-3">
+          <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
+            <h3 class="h6 mb-0">Call #{{ run.id }} · {{ run.provider }} / {{ run.provider_model if run.provider_model is not none else "Not returned" }}</h3>
+            <span class="badge text-bg-secondary">{{ run.status }}</span>
+          </div>
+          <dl class="row small mb-0">
+            <dt class="col-sm-3">Prompt version</dt><dd class="col-sm-9">{{ run.prompt_version }}</dd>
+            <dt class="col-sm-3">Started (UTC)</dt><dd class="col-sm-9">{{ run.started_at.strftime("%Y-%m-%d %H:%M:%S") }}</dd>
+            <dt class="col-sm-3">Finished (UTC)</dt><dd class="col-sm-9">{{ run.finished_at.strftime("%Y-%m-%d %H:%M:%S") if run.finished_at else "Not finished" }}</dd>
+            <dt class="col-sm-3">Latency</dt><dd class="col-sm-9">{{ (run.latency_ms|string ~ " ms") if run.latency_ms is not none else "Not returned" }}</dd>
+            <dt class="col-sm-3">Prompt tokens</dt><dd class="col-sm-9">{{ run.prompt_tokens if run.prompt_tokens is not none else "Not returned" }}</dd>
+            <dt class="col-sm-3">Completion tokens</dt><dd class="col-sm-9">{{ run.completion_tokens if run.completion_tokens is not none else "Not returned" }}</dd>
+            <dt class="col-sm-3">Total tokens</dt><dd class="col-sm-9">{{ run.total_tokens if run.total_tokens is not none else "Not returned" }}</dd>
+            <dt class="col-sm-3">Finish reason</dt><dd class="col-sm-9">{{ run.finish_reason if run.finish_reason is not none else "Not returned" }}</dd>
+          </dl>
+          {% if run.error_message %}<p class="text-danger small mb-0">{{ run.error_message }}</p>{% endif %}
+        </article>
+      {% else %}
+        <p class="text-muted mb-0">No recorded generation calls for this historical session.</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="panel mb-4">
+    <div class="panel-header"><h2>Human review metrics</h2></div>
+    <dl class="row mb-0">
+      <dt class="col-sm-4">Edited drafts</dt><dd class="col-sm-8">{{ metrics.edited_drafts }} / {{ metrics.total_drafts }} ({{ "%.1f"|format(metrics.edit_rate * 100) }}%)</dd>
+      <dt class="col-sm-4">Average changed fields</dt><dd class="col-sm-8">{{ "%.2f"|format(metrics.average_changed_fields) }} per edit with content changes</dd>
+      <dt class="col-sm-4">Accepted drafts</dt><dd class="col-sm-8">{{ metrics.accepted_count }} / {{ metrics.total_drafts }} ({{ "%.1f"|format(metrics.acceptance_rate * 100) }}%)</dd>
+      <dt class="col-sm-4">Rejected drafts</dt><dd class="col-sm-8">{{ metrics.rejected_count }} / {{ metrics.total_drafts }} ({{ "%.1f"|format(metrics.rejection_rate * 100) }}%)</dd>
+      <dt class="col-sm-4">Review actions</dt><dd class="col-sm-8">{{ metrics.review_count }}</dd>
+    </dl>
+    <p class="text-muted small mb-0">Editing counts changes to the nine draft content fields. Status changes do not count as edits. Acceptance and rejection use each draft's final status.</p>
+  </section>
+
+  <section class="panel mb-4">
     <div class="panel-header"><h2>Structured test points</h2></div>
     <div class="row g-3">
       {% for point in test_points %}
@@ -122,14 +169,16 @@
               <h3 class="h5 mb-1">{{ draft.title }}</h3>
               <div class="text-muted small">{{ draft.suggested_code }} · {{ draft.module }} · {{ draft.case_type }}</div>
             </div>
-            <div class="d-flex gap-2 align-items-start">
-              {% if draft.status == "pending" %}
+            <div class="d-flex gap-2 align-items-start flex-wrap">
+              {% if draft.status == "pending" and current_user.is_authenticated %}
                 <a class="btn btn-sm btn-outline-primary" href="{{ url_for('ai_test_design.edit_draft', draft_id=draft.id) }}">Edit</a>
-                <form method="post" action="{{ url_for('ai_test_design.accept_draft', draft_id=draft.id) }}">
-                  <button class="btn btn-sm btn-success" type="submit">Accept</button>
-                </form>
-                <form method="post" action="{{ url_for('ai_test_design.reject_draft', draft_id=draft.id) }}">
-                  <button class="btn btn-sm btn-outline-danger" type="submit">Reject</button>
+                <form method="post" action="{{ url_for('ai_test_design.accept_draft', draft_id=draft.id) }}" class="w-100" style="max-width: 24rem;">
+                  <label class="form-label small" for="comment-{{ draft.id }}">Review comment (optional)</label>
+                  <textarea class="form-control form-control-sm mb-2" id="comment-{{ draft.id }}" name="comment" rows="2" maxlength="1000"></textarea>
+                  <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-success" type="submit">Accept</button>
+                    <button class="btn btn-sm btn-outline-danger" type="submit" formaction="{{ url_for('ai_test_design.reject_draft', draft_id=draft.id) }}">Reject</button>
+                  </div>
                 </form>
               {% elif draft.accepted_test_case %}
                 <a class="btn btn-sm btn-success" href="{{ url_for('testcases.detail', test_case_id=draft.accepted_test_case.id) }}">Formal TestCase</a>
@@ -145,6 +194,23 @@
             <dt class="col-md-3">Expected result</dt>
             <dd class="col-md-9" style="white-space: pre-wrap;">{{ draft.expected_result }}</dd>
           </dl>
+          <div class="mt-3">
+            <h4 class="h6">Review history</h4>
+            {% for entry in review_history[draft.id] %}
+              {% set record = entry.record %}
+              <div class="border-top pt-2 mt-2 small text-break">
+                <div class="d-flex flex-wrap justify-content-between gap-2">
+                  <span class="fw-semibold">{{ record.action }} · {{ record.reviewer.username }}</span>
+                  <span class="text-muted">{{ record.created_at.strftime("%Y-%m-%d %H:%M:%S") }} UTC</span>
+                </div>
+                <p class="mb-1">Changed fields: {{ entry.changed_fields|join(", ") if entry.changed_fields else "None" }} ({{ record.changed_field_count }})</p>
+                <p class="mb-1">Rule-based session quality: {{ record.score_before }}/100 → {{ record.score_after }}/100</p>
+                {% if record.comment %}<p class="mb-0" style="white-space: pre-wrap;">{{ record.comment }}</p>{% endif %}
+              </div>
+            {% else %}
+              <p class="text-muted small mb-0">No recorded reviews.</p>
+            {% endfor %}
+          </div>
         </article>
       {% endfor %}
     </div>

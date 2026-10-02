@@ -7,6 +7,7 @@ from app.models import (
     TestCase as ModelTestCase,
     TestCaseDraft as ModelTestCaseDraft,
     TestDesignSession as ModelTestDesignSession,
+    User,
     Version,
 )
 from app.services.ai.exceptions import AIProviderError
@@ -35,7 +36,24 @@ def app(tmp_path):
 
 @pytest.fixture()
 def client(app):
-    return app.test_client()
+    with app.app_context():
+        reviewer = User(
+            username="Demo route reviewer",
+            email="route-reviewer@example.test",
+        )
+        reviewer.set_password("demo-route-password")
+        db.session.add(reviewer)
+        db.session.commit()
+    client = app.test_client()
+    response = client.post(
+        "/auth/login",
+        data={
+            "email": "route-reviewer@example.test",
+            "password": "demo-route-password",
+        },
+    )
+    assert response.status_code == 302
+    return client
 
 
 @pytest.fixture()

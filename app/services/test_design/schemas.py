@@ -112,6 +112,12 @@ class TestDesignResult(StrictModel):
     ]
 
 
+class PersistedTestDesignResult(TestDesignResult):
+    """Session history can aggregate multiple independently bounded calls."""
+
+    case_drafts: Annotated[list[TestCaseDraftData], Field(min_length=1)]
+
+
 class TestDesignContext(StrictModel):
     title: ShortText
     requirement_text: RequirementText

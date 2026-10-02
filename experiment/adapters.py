@@ -21,6 +21,7 @@ from app.extensions import db
 from app.models import GenerationRun, Project, TestCaseDraft, Version
 from app.services.ai.exceptions import AIProviderError, AIResponseError
 from app.services.test_design.deepseek_provider import DeepSeekTestDesignProvider
+from app.services.test_design.diagnostics import sanitize_validation_summary, validation_summary
 from app.services.test_design.evidence import safe_error, safe_text
 from app.services.test_design.prompts import PROMPT_VERSION, prompt_hash, requirement_hash
 from app.services.test_design.schemas import TestDesignContext, TestDesignResult
@@ -169,6 +170,7 @@ class _TrackedProvider(DeepSeekTestDesignProvider):
         self.call_started = True
         result = super().generate(context)
         if _unsafe(result.model_dump(mode="json"), self.experiment_config):
+            self.last_validation_summary = validation_summary("output_safety", "sensitive_content")
             raise AIResponseError("Experiment output failed safety validation.")
         return result
 
@@ -386,6 +388,11 @@ class ProposedAdapter(_Adapter):
             if provider is not None:
                 metadata = getattr(provider, "last_call_metadata", None)
                 _response_evidence(record, getattr(metadata, "provider_model", None), self.config)
+                if self.settings.get("validation_diagnostics") is True:
+                    diagnostic = sanitize_validation_summary(
+                        getattr(provider, "last_validation_summary", None))
+                    if diagnostic is not None:
+                        record["validation_diagnostic"] = diagnostic
             try:
                 if record["version_id"] is None:
                     raise ValueError("No experiment version was created.")

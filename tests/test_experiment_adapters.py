@@ -10,6 +10,8 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
+from test_design_contract import PROMPT_VERSION
+
 
 SETTINGS = {
     "execute": True, "ai_enabled": True, "api_key": "demo-private-key",
@@ -283,7 +285,7 @@ def test_proposed_exports_durable_run_and_matching_pending_draft(tmp_path):
     assert record["initial_cases"][0]["accepted_test_case_id"] is None
     assert record["returned_model"] == "demo-response-model"
     assert record["model_evidence_source"] == "provider_response_metadata"
-    assert record["prompt_version"] == "test-design-v2"
+    assert record["prompt_version"] == PROMPT_VERSION
     assert record["latency_scope"] == "test_design_service"
     assert len(factory.calls) == 1 and factory.calls[0]["response_format"] == {"type": "json_object"}
     with sqlite3.connect(tmp_path / "runs" / "proposed.sqlite") as connection:

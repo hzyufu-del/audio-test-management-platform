@@ -8,6 +8,8 @@ from sqlalchemy import event
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import StaleDataError
 
+from test_design_contract import PROMPT_VERSION
+
 from app import create_app
 from app.extensions import db
 from app.models import Project, TestCaseDraft as Draft, TestDesignSession as Design, Version
@@ -52,7 +54,7 @@ def test_mock_success_persists_source_snapshot_hashes_and_null_usage(catalog):
     assert run.session_id == session.id
     assert run.status == "succeeded" and run.provider == "mock"
     assert run.requirement_hash == hashlib.sha256(data["requirement_text"].encode()).hexdigest()
-    assert len(run.prompt_hash) == 64 and run.prompt_version == session.prompt_version == "test-design-v2"
+    assert len(run.prompt_hash) == 64 and run.prompt_version == session.prompt_version == PROMPT_VERSION
     assert run.started_at <= run.finished_at and run.latency_ms >= 0
     assert run.input_chars > len(data["requirement_text"]) and run.output_chars > 0
     assert (run.prompt_tokens, run.completion_tokens, run.total_tokens, run.finish_reason) == (None,) * 4

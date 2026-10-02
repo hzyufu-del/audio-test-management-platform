@@ -15,6 +15,7 @@ from app.models import (
     Version,
 )
 from app.services.test_design_service import TestDesignService as DesignService
+from app.services.test_design.prompts import PROMPT_VERSION
 
 
 @pytest.fixture()
@@ -245,7 +246,7 @@ def test_detail_displays_generation_review_history_and_rule_metrics(
     ).get_data(as_text=True)
 
     for value in (
-        "Generation history", "test-design-v2", "succeeded", "Not returned",
+        "Generation history", PROMPT_VERSION, "succeeded", "Not returned",
         "Prompt tokens", "Completion tokens", "Total tokens", "Finish reason",
         "Latency", "UTC", "Review history", "Demo reviewer", "edit", "accept",
         "Changed fields", "title", "Rule-based session quality",

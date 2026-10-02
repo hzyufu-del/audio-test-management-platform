@@ -5,7 +5,7 @@ from app.extensions import db
 from app.models import GenerationRun, TestCaseDraft as Draft, TestDesignSession as Design
 from app.services.test_design.deepseek_provider import DeepSeekTestDesignProvider
 from app.services.test_design.mock_provider import MockTestDesignProvider
-from app.services.test_design.prompts import prompt_hash, requirement_hash
+from app.services.test_design.prompts import PROMPT_VERSION, prompt_hash, requirement_hash
 from app.services.test_design.schemas import TestDesignContext as Context
 from app.services.test_design_service import TestDesignService as Service
 from scripts.llm_generation_smoke import DEMO_REQUIREMENT, execute_smoke
@@ -105,7 +105,7 @@ def test_smoke_succeeds_only_with_persisted_call_session_and_draft_sources(
         run = db.session.get(GenerationRun, report["run_id"])
         session = db.session.get(Design, report["session_id"])
         assert run.status == "succeeded" and run.session_id == session.id
-        assert run.prompt_version == session.prompt_version == "test-design-v2"
+        assert run.prompt_version == session.prompt_version == PROMPT_VERSION
         assert report["draft_count"] == len(session.drafts) > 0
         assert report["test_point_count"] == len(json.loads(session.test_points_json)) > 0
         assert all(d.status == "pending" and d.generation_run_id == run.id for d in session.drafts)

@@ -42,6 +42,7 @@ def execution_settings(args):
                             else config["AI_REQUEST_TIMEOUT_SECONDS"]),
         "max_output_tokens": (args.max_output_tokens if args.max_output_tokens is not None
                               else config["AI_MAX_OUTPUT_TOKENS"]),
+        "validation_diagnostics": getattr(args, "validation_diagnostics", False),
     }
 
 
@@ -52,6 +53,8 @@ def main(argv=None):
     parser.add_argument("--dataset-dir", type=Path, default=ROOT / "experiment" / "pilot_dataset")
     parser.add_argument("--requirement-id", action="append")
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--validation-diagnostics", action="store_true",
+                        help="Save safe Proposed validation summaries for a new Pilot only.")
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--model")
     parser.add_argument("--timeout-seconds", type=int)

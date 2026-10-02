@@ -5,6 +5,8 @@ from flask_login import login_user
 from pydantic import ValidationError
 from sqlalchemy.exc import OperationalError
 
+from test_design_contract import PROMPT_VERSION
+
 from app import create_app
 from app.extensions import db
 from app.models import (
@@ -373,10 +375,7 @@ def test_success_persists_validated_session_and_all_drafts_atomically(
     app,
     targets,
 ):
-    from app.services.test_design_service import (
-        PROMPT_VERSION,
-        TestDesignService,
-    )
+    from app.services.test_design_service import TestDesignService
 
     provider = RecordingProvider()
     requirement = (
@@ -394,7 +393,7 @@ def test_success_persists_validated_session_and_all_drafts_atomically(
         assert session.status == "generated"
         assert session.provider == "mock"
         assert session.provider_model is None
-        assert session.prompt_version == PROMPT_VERSION == "test-design-v2"
+        assert session.prompt_version == PROMPT_VERSION
         assert session.quality_score == 100
         assert len(session.drafts) >= 3
         assert {item.status for item in session.drafts} == {"pending"}

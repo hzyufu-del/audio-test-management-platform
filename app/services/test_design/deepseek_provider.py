@@ -17,6 +17,7 @@ from app.services.ai.exceptions import (
 )
 
 from .prompts import build_test_design_messages
+from .diagnostics import summarize_validation_error, validation_summary
 from .provider import GenerationMetadata, TestDesignProvider
 from .schemas import TestDesignContext, TestDesignResult
 
@@ -55,6 +56,7 @@ class DeepSeekTestDesignProvider(TestDesignProvider):
 
     def generate(self, context: TestDesignContext) -> TestDesignResult:
         self.last_call_metadata = None
+        self.last_validation_summary = None
         messages = build_test_design_messages(context)
         input_chars = sum(len(item["content"]) for item in messages)
         self.last_call_metadata = GenerationMetadata(
@@ -71,37 +73,53 @@ class DeepSeekTestDesignProvider(TestDesignProvider):
                 extra_body={"thinking": {"type": "disabled"}},
             )
         except APITimeoutError:
+            self.last_validation_summary = validation_summary("api", "api_timeout")
             raise AIProviderError(
                 "AI test design request timed out. No draft was saved."
             ) from None
         except AuthenticationError:
+            self.last_validation_summary = validation_summary("api", "api_authentication")
             raise AIConfigurationError(
                 "DeepSeek test design is not configured locally."
             ) from None
         except RateLimitError:
+            self.last_validation_summary = validation_summary("api", "api_rate_limit")
             raise AIProviderError(
                 "AI test design is temporarily rate limited."
             ) from None
         except (APIConnectionError, APIStatusError):
+            self.last_validation_summary = validation_summary("api", "api_unavailable")
             raise AIProviderError(
                 "AI test design is temporarily unavailable."
             ) from None
         except Exception:
+            self.last_validation_summary = validation_summary("api", "api_unavailable")
             raise AIProviderError(
                 "AI test design is temporarily unavailable."
             ) from None
 
         self.last_call_metadata = self._response_metadata(response, input_chars)
         if self.last_call_metadata.finish_reason == "length":
+            self.last_validation_summary = validation_summary("output_limit", "output_limit")
             raise AIResponseError(
                 "AI test design reached its output limit. No draft was saved."
             ) from None
-        content = self._response_content(response)
+        try:
+            content = self._response_content(response)
+        except AIResponseError:
+            self.last_validation_summary = validation_summary("response_content", "no_usable_content")
+            raise
         try:
             return TestDesignResult.model_validate_json(
                 self._remove_complete_json_wrapper(content)
             )
-        except (ValidationError, ValueError, TypeError):
+        except ValidationError as exc:
+            self.last_validation_summary = summarize_validation_error(exc)
+            raise AIResponseError(
+                "AI test design output failed strict schema validation."
+            ) from None
+        except (ValueError, TypeError):
+            self.last_validation_summary = validation_summary("schema", "other")
             raise AIResponseError(
                 "AI test design output failed strict schema validation."
             ) from None

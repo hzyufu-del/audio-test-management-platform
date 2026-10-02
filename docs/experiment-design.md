@@ -203,7 +203,7 @@ Schema 验证与安全检查
 
 “测试点分析→结构化生成”是提示任务的逻辑组织。当前实现没有独立的测试点分析模型调用，也没有先保存测试点再进行第二次模型生成。不能在论文中写成已实现的多阶段模型编排。
 
-当前 Prompt 版本为 test-design-v2；Provider 使用 JSON 模式，Pydantic 执行字段及结构验证。提示指导生成 3～6 个测试点和 3～6 条草稿，Schema 实际允许每类 1～20 项。规则评分主要检查结构、场景标签、步骤形式和预期结果中的可观察词，不验证真实语义覆盖，不自动修复或补生成缺失场景。
+当前 Prompt 版本为 test-design-v3（Step 3-C 只补充已有字段约束的明确说明，历史 v2 保留；Schema、评分及评价口径未变）；Provider 使用 JSON 模式，Pydantic 执行字段及结构验证。提示指导生成 3～6 个测试点和 3～6 条草稿，Schema 实际允许每类 1～20 项。规则评分主要检查结构、场景标签、步骤形式和预期结果中的可观察词，不验证真实语义覆盖，不自动修复或补生成缺失场景。
 
 ### 6.2 现有实体职责
 
@@ -465,7 +465,7 @@ RQ3 报告调用状态数量、成功率、成功/失败耗时、已知 Token �
 
 - [模型定义](../app/models.py)：Session、Draft、GenerationRun、ReviewRecord 及来源关系。
 - [生成与审核服务](../app/services/test_design_service.py)：单次调用、计时、保存及修改/接受/拒绝。
-- [生成 Prompt](../app/services/test_design/prompts.py)：test-design-v2、消息构造及 hash。
+- [生成 Prompt](../app/services/test_design/prompts.py)：test-design-v3、消息构造及 hash。
 - [DeepSeek Provider](../app/services/test_design/deepseek_provider.py)：实际调用参数、元数据与 length 拒绝。
 - [Schema](../app/services/test_design/schemas.py)：输入/输出边界及九字段定义。
 - [规则评分](../app/services/test_design/quality.py)：0～100 规则分的实际计算。

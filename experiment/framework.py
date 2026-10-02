@@ -17,6 +17,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from test_design_contract import PROMPT_VERSION
+
 ROOT = Path(__file__).resolve().parents[1]
 CATEGORIES = ("用户认证", "信息管理", "查询搜索", "文件上传", "权限管理", "订单流程", "系统设置")
 RULE_FIELDS = ("business_rules", "input_constraints", "exception_conditions", "boundary_conditions")
@@ -142,7 +144,7 @@ def _source_evidence():
         ).strip()
     except (OSError, subprocess.SubprocessError):
         revision = None
-    paths = [ROOT / "config.py", ROOT / "requirements.txt"]
+    paths = [ROOT / "config.py", ROOT / "requirements.txt", ROOT / "test_design_contract.py"]
     paths.extend((ROOT / "app").rglob("*.py"))
     paths.extend((ROOT / "experiment").glob("*.py"))
     paths.extend([ROOT / "scripts" / "run_pilot.py", ROOT / "scripts" / "run_experiment.py"])
@@ -198,7 +200,7 @@ def build_plan(dataset, *, role, selected_ids=None):
             "reference_scenarios": [p for p in dataset["reference_scenarios"]
                                     if p["requirement_id"] in requested],
             "source_evidence": _source_evidence(),
-            "prompt_versions": {"baseline": "baseline-v1", "proposed": "test-design-v2"}}
+            "prompt_versions": {"baseline": "baseline-v1", "proposed": PROMPT_VERSION}}
 
 
 def _safe_parameters(settings):
@@ -328,10 +330,14 @@ def execute_pilot(plan, output_dir, adapter_factory, settings, *,
                     pilot_base_commit=plan["source_evidence"]["git_head"],
                     experiment_id=output.name, parameters=parameters,
                     safety_policy_version="existing-test-design-security",
+                    validation_diagnostics_enabled=settings.get("validation_diagnostics") is True,
                     created_at=datetime.now(timezone.utc).isoformat())
     _write_json(output / "manifest.json", manifest)
     attempts = output / "attempts"
     attempts.mkdir()
+    diagnostics_enabled = manifest["validation_diagnostics_enabled"]
+    if diagnostics_enabled:
+        (output / "audit").mkdir()
     _write_templates(output, plan)
     adapters = {}
     outcomes = Counter()
@@ -355,11 +361,17 @@ def execute_pilot(plan, output_dir, adapter_factory, settings, *,
                        "started_at": datetime.now(timezone.utc).isoformat(),
                        "input": task["input"]}
             _write_json(attempt / "started.json", started)
+            diagnostic = None
             try:
                 result = adapters[task["method"]].generate(
                     {"requirement_id": task["requirement_id"], **task["input"]})
                 if not isinstance(result, dict):
                     raise TypeError
+                result = dict(result)
+                candidate = result.pop("validation_diagnostic", None)
+                if diagnostics_enabled and task["method"] == "proposed":
+                    from app.services.test_design.diagnostics import sanitize_validation_summary
+                    diagnostic = sanitize_validation_summary(candidate)
                 result = {key: value for key, value in result.items() if key in RESULT_FIELDS}
                 if result.get("status") not in {"succeeded", "failed", "pre_call_failed", "running", "unresolved"}:
                     raise TypeError
@@ -385,6 +397,18 @@ def execute_pilot(plan, output_dir, adapter_factory, settings, *,
                       "completion_tokens": result.get("completion_tokens"),
                       "total_tokens": result.get("total_tokens")}
             _write_json(attempt / "outcome.json", record)
+            if diagnostic is not None:
+                # Preserve request evidence first. A failed audit write stops
+                # the run; callers must inspect it, never replay this request.
+                identifiers = {
+                    key: value if type(value) is int and 1 <= value <= 2**63 - 1 else None
+                    for key in ("generation_run_id", "session_id")
+                    for value in (record.get(key),)
+                }
+                audit = {**tags, **identifiers, "validation_summary": diagnostic}
+                if not _is_safe(audit, settings):
+                    raise ExperimentError("Validation audit could not be saved safely; do not retry this attempt.")
+                _write_json(output / "audit" / f"{name}.validation.json", audit)
             outcomes[record["status"]] += 1
         summary = {"sample_role": "pilot", "execution_mode": execution_mode,
                    "formal_eligible": False, "planned_attempts": len(plan["tasks"]),

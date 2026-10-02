@@ -58,7 +58,7 @@ Pilot 数据集和选中需求均限制为 1～3 条 `PILOT_*` 需求，每条�
 
 Baseline 使用方案规定的 `baseline-v1` 简单提示，要求 3～6 条、九个内容字段，以普通列表输出。不提取测试点，不启用 JSON 模式、Schema 或规则质量评分；安全且非空的普通正文均保留，字段缺失、数量偏差等留给人工评价，不自动丢弃。响应截断、空内容或安全检查失败记为失败。Baseline 不写入业务 GenerationRun 或 ReviewRecord。
 
-Proposed 使用当前 `test-design-v2` 提示，在一次调用中联合生成测试点和草稿，沿用现有 Schema、安全检查和本地规则评分。首次使用时在本次运行目录创建新的 SQLite，采用现有模型建表，每次需求建立独立 Version 和 Session；不连接原 `instance` 数据库。导出时核对 Run、Session、Draft 的来源、初始内容和 pending 状态。不创建正式 TestCase，不替任何人进行审核。
+Proposed 使用当前 `test-design-v3` 提示，在一次调用中联合生成测试点和草稿，沿用现有 Schema、安全检查和本地规则评分。首次使用时在本次运行目录创建新的 SQLite，采用现有模型建表，每次需求建立独立 Version 和 Session；不连接原 `instance` 数据库。导出时核对 Run、Session、Draft 的来源、初始内容和 pending 状态。不创建正式 TestCase，不替任何人进行审核。
 
 每次尝试在调用前先写 `started.json`，完成后排他写入 `outcome.json`。无隐式重试、不追加重复尝试、不挑选结果、不覆盖已有运行，也不提供 resume。机器中断或写盘失败时可能只留下 started 文件，必须保留并人工核查，不能把它当成“从未调用”而重新执行同一尝试。不同新目录代表新的独立批次，不能覆盖首次证据或混入正式首次尝试。
 
@@ -113,3 +113,25 @@ SQLite 是隔离的现有表集合，初始 Run/Session/Draft 是结果源；当
 ```
 
 测试使用 FakeClient 和 pytest 临时目录。其验证对象是门禁、参数、配对输入、结果安全、失败路径及独立库闭环，不验证 DeepSeek 服务可用性、真实 Token、响应时间或测试用例语义质量。已有的历史 Smoke 和覆盖率不能代替本阶段的真实实验结果。
+
+
+## 8. Step 3-C 安全诊断与版本边界
+
+当前 Proposed 使用 `test-design-v3`。本次只澄清真实 Schema 已有的必填、
+字符串非空、空前置条件、module 长度、limitations 元素和禁止 null/额外字段约束；
+Schema、Baseline-v1、评价标准及正式数据集不变。旧 Smoke/Pilot-v1 的 v2 版本及
+hash 保留，不回填新版本，不覆盖旧 manifest、attempt、数据库或报告。
+
+后续新技术 Pilot 可显式设置 `--validation-diagnostics`，默认关闭。摘要只包含
+固定阶段/错误类别、已知字段路径、数量及 Schema 错误代码，未知字段名称被掩码；
+不保存 response、input、context、错误 message、完整 Prompt、headers 或异常原文。
+只在新运行的 Git ignored audit 中输出 Proposed 诊断，不新增业务数据库字段或 migration。
+
+该选项不发起第二次请求、不修复 JSON、不改变枚举或字段内容。单独开启该选项
+仍然是 dry-run；真实请求始终需要另行授权和显式 --execute。本 Step 3-C 未执行
+真实 Pilot，所有合成错误样本均为离线候选，不代表恢复了旧模型响应。
+
+Pilot-v1 的永久状态登记及逐文件摘要保存在 Step 3-C 独立 audit 的
+PILOT_V1_ARCHIVE.json，标记 pilot_version=pilot-v1、
+status=completed_with_proposed_validation_failure、formal_experiment=false；
+采用外部登记，保持旧 Pilot 每个文件字节不变。

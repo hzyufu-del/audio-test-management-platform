@@ -31,7 +31,7 @@ writes the Session and every Draft in one database transaction.
 TestCase review provider. The context contains only the bounded title and
 untrusted requirement text. It never contains database IDs, credentials,
 local paths, logs, API keys, or internal configuration. The application owns
-the fixed `test-design-v2` prompt version, validation, scoring, persistence,
+the fixed `test-design-v3` prompt version, validation, scoring, persistence,
 and review workflow.
 
 ## Mock and DeepSeek
@@ -118,7 +118,7 @@ Requirement Text is always untrusted data. Known instruction-like phrases are
 recorded as a risk warning rather than treated as authority. The fixed provider
 instructions require the model to ignore requests to change rules, reveal a
 prompt or configuration, output credentials, alter the schema, or create
-records. Input cannot select the Provider, change `test-design-v2`, modify
+records. Input cannot select the Provider, change `test-design-v3`, modify
 quality rules, or bypass the human acceptance transaction. Pages do not expose
 the full fixed prompt.
 
@@ -175,7 +175,7 @@ success/failure and keep Mock and DeepSeek cohorts distinct.
 
 ## Demo flow
 
-The current `test-design-v2` prompt gives the complete JSON example, all enum
+The current `test-design-v3` prompt gives the complete JSON example, all enum
 values, string field types, and concise 3–6 point/draft guidance. The existing
 strict Schema limits are unchanged; historical `test-design-v1` seed and Run
 records are preserved. A `finish_reason=length` response is rejected even if
@@ -235,3 +235,24 @@ not a silent application action.
 - Prompt-injection text remains data and cannot control Provider, schema,
   scoring, prompt version, or TestCase creation.
 - Mock/demo/sample-only data keeps the portfolio demonstration honest.
+
+
+## Pilot validation diagnostics
+
+The current `test-design-v3` clarifies required nonblank strings, empty-string
+preconditions, module length, nonempty limitation strings, and no null or extra
+keys. The Schema, deterministic scoring, Baseline, acceptance criteria and
+database definitions are unchanged. Historical Smoke and Pilot-v1 records keep
+`test-design-v2` and their original hash; seed/history is never backfilled.
+
+A bounded in-memory validation summary distinguishes JSON parsing, Schema,
+output-safety and other failure stages. It retains only fixed error categories,
+sanitized Schema paths, counts and codes. It excludes invalid output, error
+input/context/message, credentials, headers and exception strings. No new
+GenerationRun column or migration is used.
+
+Pilot audit export is opt-in via `--validation-diagnostics`; it is disabled by
+default and never changes the one-call/no-retry rule. Summaries belong to a new
+ignored run's audit directory, with the relevant attempt/Run association, not
+to historical records. Enabling it without `--execute` remains a dry-run.
+Step 3-C validates this exclusively with FakeClient; no real request is authorized.

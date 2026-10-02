@@ -24,6 +24,9 @@ from .ai.exceptions import (
     AIReviewError,
 )
 from .test_design.deepseek_provider import DeepSeekTestDesignProvider
+from .test_design.diagnostics import (
+    set_validation_summary, summarize_validation_error, validation_summary,
+)
 from .test_design.evidence import GenerationRecorder, safe_error, safe_metadata
 from .test_design.mock_provider import MockTestDesignProvider
 from .test_design.prompts import PROMPT_VERSION
@@ -107,6 +110,7 @@ class TestDesignService:
 
     def _generate(self, context, project_id, version_id, provider, session=None):
         provider.last_call_metadata = None
+        set_validation_summary(provider, None)
         recorder = GenerationRecorder(self.config)
         run_id = recorder.start(
             context=context, project_id=project_id, version_id=version_id,
@@ -117,20 +121,27 @@ class TestDesignService:
         try:
             try:
                 raw_result = provider.generate(context)
+            except ValidationError:
+                # Third-party providers may validate their raw result themselves.
+                raise
             except AIReviewError as exc:
                 # Providers outside our adapter may use arbitrary exception
                 # messages. Preserve the safe category, never their string.
                 _, message = safe_error(exc)
                 raise type(exc)(message) from None
             except Exception:
+                set_validation_summary(provider, validation_summary("api", "api_unavailable"))
                 raise AIProviderError(
                     "AI test design could not be generated. No draft was saved."
                 ) from None
             result = TestDesignResult.model_validate(raw_result)
-            if (
-                contains_forbidden_content(result, config=self.config)
-                or not contains_demo_scope(result)
-            ):
+            if contains_forbidden_content(result, config=self.config):
+                set_validation_summary(provider, validation_summary("output_safety", "sensitive_content"))
+                raise AIResponseError(
+                    "AI test design output failed safety validation."
+                )
+            if not contains_demo_scope(result):
+                set_validation_summary(provider, validation_summary("output_safety", "missing_demo_scope"))
                 raise AIResponseError(
                     "AI test design output failed safety validation."
                 )
@@ -144,7 +155,8 @@ class TestDesignService:
                 result = TestDesignResult.model_validate(payload)
             assessment = score_test_design(result, risk_warnings=risks)
             structured_output = _dump_json(result.model_dump(mode="json"))
-        except ValidationError:
+        except ValidationError as exc:
+            set_validation_summary(provider, summarize_validation_error(exc))
             recorder.fail(
                 run_id, error=AIResponseError("Invalid schema."),
                 metadata=safe_metadata(provider, self.config),
@@ -213,6 +225,7 @@ class TestDesignService:
             run.structured_output_json = structured_output
             db.session.commit()
         except SQLAlchemyError as exc:
+            set_validation_summary(provider, validation_summary("business_persistence", "persistence_failure"))
             db.session.rollback()
             recorder.fail(
                 run_id, error=WorkflowPersistenceError("Cannot save generation."),

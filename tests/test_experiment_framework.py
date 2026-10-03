@@ -125,23 +125,26 @@ def pilot_copy(directory, versions=("pilot-v2", "pilot-v2")):
     return directory
 
 
-def test_pilot_v2_dataset_loads_without_changing_historical_pilot(tmp_path):
+@pytest.mark.parametrize("pilot_version", ["pilot-v2", "pilot-v3"])
+def test_versioned_pilot_dataset_loads_without_changing_historical_pilot(tmp_path, pilot_version):
     module = framework()
     historical = {path.name: path.read_bytes() for path in PILOT.glob("*.jsonl")}
-    dataset = module.load_dataset(pilot_copy(tmp_path / "input"), role="pilot")
-    assert dataset["dataset_version"] == "pilot-v2"
+    dataset = module.load_dataset(
+        pilot_copy(tmp_path / "input", (pilot_version, pilot_version)), role="pilot")
+    assert dataset["dataset_version"] == pilot_version
     assert len(dataset["requirements"]) == 2
     assert len(dataset["reference_scenarios"]) == 12
     assert {path.name: path.read_bytes() for path in PILOT.glob("*.jsonl")} == historical
     assert module.load_dataset(PILOT, role="pilot")["dataset_version"] == "pilot-v1"
 
 
-def test_pilot_v2_plan_has_four_immutable_alternating_attempts():
+@pytest.mark.parametrize("pilot_version", ["pilot-v2", "pilot-v3"])
+def test_versioned_pilot_plan_has_four_immutable_alternating_attempts(pilot_version):
     module = framework()
     dataset = module.load_dataset(PILOT, role="pilot")
-    dataset["dataset_version"] = "pilot-v2"
+    dataset["dataset_version"] = pilot_version
     plan = module.build_plan(dataset, role="pilot")
-    assert plan["pilot_version"] == plan["dataset_version"] == "pilot-v2"
+    assert plan["pilot_version"] == plan["dataset_version"] == pilot_version
     assert plan["prompt_versions"] == {
         "baseline": "baseline-v1", "proposed": "test-design-v3"}
     assert [task["method"] for task in plan["tasks"]] == [
@@ -153,22 +156,31 @@ def test_pilot_v2_plan_has_four_immutable_alternating_attempts():
         assert set(first["input"]) == {"title", "requirement_text"}
 
 
-def test_pilot_v2_manifest_is_saved_before_calls_and_versions_reach_all_artifacts(tmp_path):
+@pytest.mark.parametrize("pilot_version", ["pilot-v2", "pilot-v3"])
+def test_versioned_pilot_manifest_precedes_calls_and_versions_reach_artifacts(tmp_path, pilot_version):
     module = framework()
     dataset = module.load_dataset(PILOT, role="pilot")
-    dataset["dataset_version"] = "pilot-v2"
+    dataset["dataset_version"] = pilot_version
     plan = module.build_plan(dataset, role="pilot")
     # Explicit metadata tests execution independently of the builder assertion.
-    plan["pilot_version"] = "pilot-v2"
+    plan["pilot_version"] = pilot_version
+    if pilot_version == "pilot-v3":
+        plan.update(purpose="stale-purpose", base_commit="stale-commit")
     calls = []
-    output = tmp_path / "pilot-v2"
+    output = tmp_path / pilot_version
 
     def factory(directory, config):
         assert not calls
         manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
-        assert manifest["pilot_version"] == manifest["dataset_version"] == "pilot-v2"
+        assert manifest["pilot_version"] == manifest["dataset_version"] == pilot_version
         assert manifest["prompt_versions"]["proposed"] == "test-design-v3"
         assert manifest.get("prompt_version") == "test-design-v3"
+        if pilot_version == "pilot-v3":
+            assert manifest["purpose"] == "final_technical_readiness_gate"
+            assert manifest["base_commit"] == manifest["pilot_base_commit"] == (
+                plan["source_evidence"]["git_head"])
+        else:
+            assert "purpose" not in manifest and "base_commit" not in manifest
         return fake_factory(calls)(directory, config)
 
     summary = module.execute_pilot(plan, output, factory, settings(), execute=True,
@@ -180,14 +192,14 @@ def test_pilot_v2_manifest_is_saved_before_calls_and_versions_reach_all_artifact
                  for path in sorted(output.rglob("*.json"))]
     assert len(artifacts) == 10
     for artifact in [summary, *artifacts]:
-        assert artifact["pilot_version"] == "pilot-v2"
+        assert artifact["pilot_version"] == pilot_version
         assert artifact["formal_eligible"] is False
         assert artifact["formal_experiment"] is False
 
 
 @pytest.mark.parametrize("versions", [
     ("pilot-v1", "pilot-v2"), ("pilot-v2", "pilot-v3"),
-    ("pilot-v3", "pilot-v3"), ("v1.0", "v1.0"),
+    ("pilot-v4", "pilot-v4"), ("v1.0", "v1.0"),
 ])
 def test_pilot_dataset_rejects_mixed_unknown_and_formal_versions(tmp_path, versions):
     module = framework()
@@ -195,7 +207,7 @@ def test_pilot_dataset_rejects_mixed_unknown_and_formal_versions(tmp_path, versi
         module.load_dataset(pilot_copy(tmp_path / "input", versions), role="pilot")
 
 
-@pytest.mark.parametrize("version", ["pilot-v3", "v1.0", None])
+@pytest.mark.parametrize("version", ["pilot-v4", "v1.0", None])
 def test_pilot_plan_rejects_unknown_and_formal_dataset_versions(version):
     module = framework()
     dataset = module.load_dataset(PILOT, role="pilot")
@@ -370,6 +382,63 @@ def test_nested_mapping_key_cannot_export_a_credential(tmp_path):
     content = "".join(p.read_text(encoding="utf-8") for p in output.rglob("*.json"))
     assert settings()["api_key"] not in content
     assert "ExportSafetyError" in content
+
+
+def test_export_safety_keeps_timestamps_separate_from_demo_level_labels(tmp_path):
+    module = framework()
+    plan = module.build_plan(module.load_dataset(PILOT, role="pilot"), role="pilot")
+    output = tmp_path / "pilot"
+    result = {
+        "status": "succeeded", "started_at": "2026-10-02T08:00:00+00:00",
+        "structured_output": {"case_drafts": [{
+            "expected_result": "Demo status display includes the INFO label.",
+        }]},
+    }
+    summary = module.execute_pilot(
+        plan, output, fake_factory([], {"proposed": result}), settings(),
+        execute=True, execution_mode="offline_fixture",
+    )
+    assert summary["succeeded"] == 4
+    records = [json.loads(path.read_text(encoding="utf-8"))
+               for path in output.glob("attempts/*proposed/outcome.json")]
+    assert len(records) == 2
+    assert all(record["structured_output"] == result["structured_output"]
+               and record["started_at"] == result["started_at"] for record in records)
+
+
+@pytest.mark.parametrize("value", [
+    {"nested": [{settings()["api_key"]: "Demo harmless value"}]},
+    {"nested": [{settings()["secret_key"]: "Demo harmless value"}]},
+    {"nested": [{"Authorization": "Demo harmless value"}]},
+    {"nested": [{"request_headers": "Demo harmless value"}]},
+    {"nested": [{"value": settings()["api_key"]}]},
+    {"nested": [{"value": "2026-10-02 INFO Demo fixture log line"}]},
+    {"nested": [{"2026-10-02 INFO Demo fixture log line": "Demo value"}]},
+    {"nested": [float("nan")]},
+    {"nested": [float("inf")]},
+    {"nested": [object()]},
+], ids=["api_key", "secret_key", "authorization_key", "headers_key", "unsafe_value",
+        "log_value", "log_key", "nan", "infinity", "not_serializable"])
+def test_export_safety_still_rejects_unsafe_keys_values_and_invalid_json(value):
+    assert framework()._is_safe(value, settings()) is False
+
+
+@pytest.mark.parametrize("credential_field", ["api_key", "secret_key"])
+@pytest.mark.parametrize("value, credential", [
+    (123456789, "123456789"),
+    (1234.5, "1234.5"),
+    (True, "true"),
+    (False, "false"),
+    (None, "null"),
+], ids=["integer", "float", "true", "false", "null"])
+def test_export_safety_rejects_credentials_in_non_string_scalar_values(
+    credential_field, value, credential,
+):
+    fixture_settings = settings()
+    fixture_settings[credential_field] = credential
+    assert framework()._is_safe(
+        {"nested": ({"value": value},)}, fixture_settings,
+    ) is False
 
 
 def test_rejected_content_keeps_safe_call_metadata(tmp_path):

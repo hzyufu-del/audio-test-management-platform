@@ -27,7 +27,7 @@ REQUIREMENT_FIELDS = {"requirement_id", "dataset_version", "category", "title",
 REFERENCE_FIELDS = {"requirement_id", "point_id", "scenario_type",
                     "trigger_condition", "expected_behavior", "requirement_basis"}
 METHODS = ("baseline", "proposed")
-PILOT_VERSIONS = frozenset({"pilot-v1", "pilot-v2"})
+PILOT_VERSIONS = frozenset({"pilot-v1", "pilot-v2", "pilot-v3"})
 RESULT_FIELDS = {
     "status", "provider", "requested_model", "provider_model", "returned_model",
     "model_evidence_source", "prompt_version", "prompt_hash", "requirement_hash",
@@ -235,10 +235,28 @@ def _safe_parameters(settings):
 def _is_safe(value, settings):
     from app.services.test_design.security import contains_forbidden_content
     config = {"DEEPSEEK_API_KEY": settings.get("api_key"), "SECRET_KEY": settings.get("secret_key")}
+    def key_and_scalar_texts(item):
+        if isinstance(item, dict):
+            for key, nested in item.items():
+                yield str(key)
+                # Preserve sensitive key markers such as "Authorization":
+                # while keeping every key separate from all field values.
+                yield json.dumps(key, ensure_ascii=False) + ":"
+                yield from key_and_scalar_texts(nested)
+        elif isinstance(item, (list, tuple)):
+            for nested in item:
+                yield from key_and_scalar_texts(nested)
+        elif not isinstance(item, str):
+            # String values are checked in the original tree below; other
+            # scalars must also be checked as they will appear in JSON.
+            yield json.dumps(item, ensure_ascii=False, allow_nan=False)
     try:
-        serialized = json.dumps(value, ensure_ascii=False, allow_nan=False)
+        # Validate JSON compatibility without joining unrelated fields for
+        # content detection (an ISO timestamp plus an INFO label is no log).
+        json.dumps(value, ensure_ascii=False, allow_nan=False)
         return (not contains_forbidden_content(value, config=config)
-                and not contains_forbidden_content(serialized, config=config))
+                and not any(contains_forbidden_content(text, config=config)
+                            for text in key_and_scalar_texts(value)))
     except (TypeError, ValueError):
         return False
 
@@ -287,7 +305,7 @@ def _validate_pilot_plan(plan):
         version = plan["dataset_version"]
         if version not in PILOT_VERSIONS or plan["formal_eligible"] is not False:
             raise ValueError
-        # Historical v1 plans predate this explicit tag; v2 must declare it.
+        # Historical v1 plans predate this explicit tag; later versions require it.
         if plan.get("pilot_version", version if version == "pilot-v1" else None) != version:
             raise ValueError
         ids, tasks = set(), []
@@ -346,6 +364,9 @@ def execute_pilot(plan, output_dir, adapter_factory, settings, *,
                     safety_policy_version="existing-test-design-security",
                     validation_diagnostics_enabled=settings.get("validation_diagnostics") is True,
                     created_at=datetime.now(timezone.utc).isoformat())
+    if plan["dataset_version"] == "pilot-v3":
+        manifest.update(purpose="final_technical_readiness_gate",
+                        base_commit=manifest["pilot_base_commit"])
     _write_json(output / "manifest.json", manifest)
     attempts = output / "attempts"
     attempts.mkdir()

@@ -454,3 +454,60 @@ def test_proposed_attempts_are_separate_versions_runs_and_initial_sources(tmp_pa
     assert first["generation_run_id"] != second["generation_run_id"]
     assert first["session_id"] != second["session_id"] and first["version_id"] != second["version_id"]
     assert first["project_id"] == second["project_id"] and factory.closed == 2
+
+
+@pytest.mark.parametrize("source_field", ["generation_run_id", "session_id"])
+def test_proposed_rejects_draft_bound_to_another_attempt(tmp_path, monkeypatch, source_field):
+    from app.extensions import db
+    from app.services.test_design_service import TestDesignService
+
+    class TwoCalls(FakeFactory):
+        def create(self, **kwargs):
+            self.calls.append(kwargs)
+            assert len(self.calls) <= 2, "No retry is allowed for either fixture attempt."
+            return self.outcome
+
+    factory = TwoCalls(reply(json.dumps(PAYLOAD)))
+    adapter = make("proposed", tmp_path, factory)
+    first = adapter.generate(REQUIREMENT)
+    assert first["status"] == "succeeded" and len(factory.calls) == 1
+    original = TestDesignService.create_session
+    changed_draft_id = None
+
+    def bind_draft_to_previous_attempt(service, **kwargs):
+        nonlocal changed_draft_id
+        session = original(service, **kwargs)
+        draft = session.drafts[0]
+        changed_draft_id = draft.id
+        setattr(draft, source_field, first[source_field])
+        db.session.commit()
+        return session
+
+    monkeypatch.setattr(TestDesignService, "create_session", bind_draft_to_previous_attempt)
+    second = adapter.generate({**REQUIREMENT, "title": "Demo independent second requirement"})
+    adapter.close()
+
+    assert len(factory.calls) == 2
+    assert second["generation_run_id"] != first["generation_run_id"]
+    assert second["session_id"] != first["session_id"]
+    assert second["status"] == "failed" and second["run_status"] == "succeeded"
+    assert second["error_type"] == "EvidenceValidationError"
+    assert second["initial_cases"] == [] and second["structured_output"] is None
+    with sqlite3.connect(tmp_path / "runs" / "proposed.sqlite") as connection:
+        run = connection.execute(
+            "SELECT status,session_id,structured_output_json FROM generation_run WHERE id = ?",
+            (second["generation_run_id"],),
+        ).fetchone()
+        assert run[:2] == ("succeeded", second["session_id"])
+        assert json.loads(run[2]) == PAYLOAD
+        draft = connection.execute(
+            "SELECT generation_run_id,session_id,status,accepted_test_case_id "
+            "FROM test_case_draft WHERE id = ?", (changed_draft_id,),
+        ).fetchone()
+        expected = {
+            "generation_run_id": second["generation_run_id"], "session_id": second["session_id"],
+        }
+        expected[source_field] = first[source_field]
+        assert draft == (expected["generation_run_id"], expected["session_id"], "pending", None)
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+        assert connection.execute("SELECT COUNT(*) FROM test_case").fetchone()[0] == 0

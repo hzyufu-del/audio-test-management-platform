@@ -1,0 +1,70 @@
+{
+  "pilot_only": true,
+  "formal_experiment": false,
+  "sample_role": "pilot",
+  "formal_eligible": false,
+  "rules_version": "pilot-v3-literal-transcription-v1",
+  "frozen_at": "2026-10-02T17:06:13.994792+00:00",
+  "source": "Pilot-v3 frozen user requirements: literal preservation and no missing-field additions",
+  "fields": [
+    "suggested_code",
+    "title",
+    "module",
+    "priority",
+    "case_type",
+    "scenario_type",
+    "precondition",
+    "steps",
+    "expected_result"
+  ],
+  "label_map": {
+    "编号": "suggested_code",
+    "用例编号": "suggested_code",
+    "标题": "title",
+    "用例标题": "title",
+    "模块": "module",
+    "优先级": "priority",
+    "用例类型": "case_type",
+    "场景类型": "scenario_type",
+    "前置条件": "precondition",
+    "测试步骤": "steps",
+    "步骤": "steps",
+    "预期结果": "expected_result",
+    "suggested_code": "suggested_code",
+    "title": "title",
+    "module": "module",
+    "priority": "priority",
+    "case_type": "case_type",
+    "scenario_type": "scenario_type",
+    "precondition": "precondition",
+    "steps": "steps",
+    "expected_result": "expected_result"
+  },
+  "value_map": {},
+  "allowed": [
+    "map explicitly labeled field names only",
+    "trim Baseline field-edge whitespace",
+    "join labeled multiline text retaining line breaks, literal values and list numbering",
+    "read labeled table cells without guessing",
+    "split only at explicit case boundaries"
+  ],
+  "missing_field": null,
+  "ambiguous_field": null,
+  "unmapped_values": "preserve verbatim without guessing",
+  "business_content_addition": false,
+  "semantic_edit": false,
+  "raw_and_source_line_evidence_required": true,
+  "parse_failure": "retain original; leave missing fields null and record unparsed spans",
+  "frozen_before_requests": true,
+  "inherited_policy": {
+    "source_file": "experiment\\pilot_runs\\pilot-v2-preflight-20261002T071344Z\\transcription-rules.json",
+    "label_map_unchanged": true,
+    "value_map_unchanged": false,
+    "reason": "User requires literal values: no uppercase conversion or enumeration remapping"
+  },
+  "proposed_projection": "initial_cases exact nine keys; preserve string values verbatim; missing fields null",
+  "preview_limitations": [
+    "Uniform formatting does not remove differences in case language, literal priority, scenario terminology, case count, or empty batches.",
+    "Blind preview is only a format check; no scoring, coverage assessment, reviewer identity, or formal evaluation is produced."
+  ]
+}

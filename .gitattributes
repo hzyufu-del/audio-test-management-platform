@@ -1,0 +1,8 @@
+# Preserve byte-level hashes for frozen experiment inputs and historical evidence.
+/experiment/dataset/requirements.jsonl -text
+/experiment/dataset/reference_scenarios.jsonl -text
+/docs/experiment-design.md -text
+/experiment/normalization_policy.json -text
+/experiment/results/FORMAL_EXPERIMENT_COLLECTION_REPORT.md -text
+/experiment/results/PREFLIGHT_V1_METADATA.json -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+/experiment/results/audit/PREFLIGHT_BLOCKER_REPORT.md -text

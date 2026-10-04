@@ -1,0 +1,22 @@
+{
+  "formal_preflight_version": "preflight-v1",
+  "execution_started": false,
+  "provider_requests": 0,
+  "stop_reason": "formal_executor_not_ready",
+  "base_commit": "29d271f3b4ee2ad4bfeefd2e2d8d3902c86551ca",
+  "recorded_at": "2026-10-03T11:14:33.418740+00:00",
+  "files": {
+    "experiment/results/audit/dry_run_plan.json": "4a27dd25b6ac6bb2723f563653ebb049d19b84c68f91f65be33d0a92a5742f55",
+    "experiment/results/audit/execution_log.jsonl": "f9aecd112276e9e22d445483f66ac79e81658d467d4268a81d94d73d1bcfb2da",
+    "experiment/results/audit/integrity_report.json": "068a70de39987622e4e93694cbbca74f47a4ec48024473bb9da03ea1ffebe2c7",
+    "experiment/results/audit/pair_audit.json": "c4aaef95e23d15a77084659350fbd1eef40e1c60267eb304a0777f408e644ac7",
+    "experiment/results/audit/preflight.json": "f38149da8cbee8db03bceddf61dd7638ea172478e570b6c02b5ab1db9f5dd0b9",
+    "experiment/results/audit/PREFLIGHT_BLOCKER_REPORT.md": "24d222a1ca5033c789c085b3a83e1d6355e2faacc8a95d6937748ec38879bd84",
+    "experiment/results/audit/pytest_related.txt": "d54abab86c21e20e8f8dac6313df681a9417181f32f606356c735a953292b21c",
+    "experiment/results/audit/related_regression.json": "7b6f1b05225d6b356c93c52cb192bf8d0ce689d36eb20beb4d37ff5069084c9d",
+    "experiment/results/audit/ruff.txt": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "experiment/results/audit/ruff_verification.json": "c3a390da62c603a3a75f9f83ca56791f55c643f52fdcf7c2113b0b5b73967c52",
+    "experiment/results/audit/run_experiment_help.txt": "b4532bd521d46fb9de4af4de911d2d939e7793d082fc1309bb75b84459797f38",
+    "experiment/results/FORMAL_EXPERIMENT_COLLECTION_REPORT.md": "f022b627a770e7e0bee2934cf223fda11cc277155f8c6c75ad4c655a6f1f012c"
+  }
+}

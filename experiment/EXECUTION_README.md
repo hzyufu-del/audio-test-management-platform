@@ -1,5 +1,37 @@
 # 实验执行框架与 Pilot 使用说明
 
+## Step 4-A 更新：正式执行器（2026-10-04）
+
+正式入口现在默认输出 `formal_experiment=true`、`execution_mode=dry_run`、
+`provider_calls_allowed=false` 的 28 条/56 对确定性计划；不加载 `.env`、不创建客户端、
+目录或数据库。`ready_to_execute` 只表示静态计划和执行器就绪，实际启动仍须重新检查
+凭据、干净源码、冻结文件及是否已有批次。
+
+```powershell
+.\.venv\Scripts\python.exe -B scripts\run_experiment.py
+```
+
+只有后续明确授权采集时，才使用 `--execute --confirm-formal` 两个固定参数；缺一项
+仍只打印 dry-run。**Step 4-A 不运行真实执行命令。** 固定输出为
+`experiment/formal_runs/formal-v1/`，不存在换目录、选单条、attempt 2、调整参数或
+自动 resume 的 CLI 选项。任何已存在批次均拒绝重启，要求人工决定恢复策略。
+
+正式 manifest 不改写；每个 pair 在 SDK 调用前保存 running 和单次调用标记。
+每次返回立即保存 outcome/方法 JSONL，核对数据、模板、规则、源码、manifest 和来源。
+真实 API 错误（包括认证失败）、length、JSON/Schema/模型输出安全失败为方法 failed；
+凭据泄露检测、本地异常、写入/导出/来源错误为 framework_error，并停止后续调用。
+认证失败不等于把凭据写入输出；本地缺失或非法配置则在 preflight 零调用拒绝。
+
+统一参数冻结为 deepseek-v4-pro、https://api.deepseek.com、8000 tokens、60 秒、
+thinking disabled、temperature 未发送、非流式、max_retries=0。预算和超时由正式计划
+固定，不接受逐条覆盖；本地配置用于启用开关、凭据、请求模型与端点一致性验证。
+Baseline 采用 Pilot-v3 原样转录规则，只映射明确标签并保留缺失/歧义和原值。
+不生成评价模板，不执行 Review/接受草稿或计算质量结论。
+
+详见 [正式设计](FORMAL_EXECUTOR_DESIGN.md) 和 [离线验收](FORMAL_EXECUTOR_VALIDATION.md)。
+下面原有说明保留为早期框架/Pilot 的历史范围；其中“正式入口仅预演”等状态仅适用于
+Step 4-A 之前，不代表新增正式执行器的当前状态。
+
 版本：experiment-runner-v1。状态：**已建立执行工具并进行离线验证；未发送真实模型请求，未执行 Pilot 或正式实验**。
 
 本框架落实 [实验方案](../docs/experiment-design.md) 的输入校验、对照顺序、调用追溯和初始结果保存。正式实验仍需先完成需求及参考点的人工复核、参数冻结和评价准备。本文件不报告生成质量、人工成本或模型性能结论。

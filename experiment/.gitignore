@@ -1,1 +1,9 @@
 pilot_runs/
+formal_runs/
+executor_validation/
+results/*
+!results/FORMAL_EXPERIMENT_COLLECTION_REPORT.md
+!results/PREFLIGHT_V1_METADATA.json
+!results/audit/
+results/audit/*
+!results/audit/PREFLIGHT_BLOCKER_REPORT.md

@@ -23,8 +23,34 @@
     </div>
   {% endif %}
 
+  {% if runtime_config_error %}
+    <div class="alert alert-danger" role="alert">
+      <strong>生成配置不可用。</strong> {{ runtime_config_error }}
+      本次不会自动切换到 Mock。请先修正配置，再重新打开此页。
+    </div>
+  {% elif runtime_provider == "mock" %}
+    <div class="alert alert-info" role="note">
+      当前模式：<strong>Mock 模拟生成</strong>。不会调用真实大模型；生成内容仅用于演示流程。
+    </div>
+  {% elif runtime_provider == "deepseek" and runtime_ai_enabled %}
+    <div class="alert alert-info" role="note">
+      当前模式：<strong>DeepSeek 真实 Provider</strong>。提交会调用已配置的模型，可能产生费用。
+      配置已启用不代表请求已经成功；以生成记录为准。
+    </div>
+  {% else %}
+    <div class="alert alert-warning" role="alert">
+      当前真实生成未启用或配置不可用。不会自动切换到 Mock。
+    </div>
+  {% endif %}
+
+  {% set recent_run_id = last_run_id|default(failed_run_id|default(none), true) %}
+  {% if recent_run_id %}
+    <p><a href="{{ url_for('ai_test_design.run_detail', run_id=recent_run_id) }}">查看本次生成记录与诊断 #{{ recent_run_id }}</a></p>
+  {% endif %}
+
   <section class="panel">
-    <form method="post" class="row g-3">
+    <form method="post" class="row g-3" id="generation-form" aria-describedby="generation-status">
+      <input type="hidden" name="request_key" value="{{ request_key }}">
       <div class="col-md-6">
         <label class="form-label" for="project_id">Project</label>
         <select class="form-select" id="project_id" name="project_id" required>
@@ -59,14 +85,20 @@
         </div>
       </div>
       <div class="col-12 d-flex gap-2">
-        <button class="btn btn-primary" type="submit">Generate drafts</button>
+        <button class="btn btn-primary" id="generate-button" type="submit" {% if runtime_config_error or runtime_provider not in ('mock', 'deepseek') or (runtime_provider == 'deepseek' and not runtime_ai_enabled) %}disabled{% endif %}>Generate drafts</button>
         <a class="btn btn-outline-secondary" href="{{ url_for('ai_test_design.index') }}">Cancel</a>
+      </div>
+      <div class="col-12">
+        <p id="generation-status" role="status" aria-live="polite" class="text-muted mb-1" hidden></p>
+        <a href="{{ url_for('ai_test_design.index') }}" target="_blank" rel="noopener">查看生成记录（新窗口）</a>
+        <p class="text-muted small mt-1 mb-0">若连接中断或等待较久，请先查看记录确认结果。刷新记录只查询状态，不会重新生成。</p>
       </div>
     </form>
   </section>
 {% endblock %}
 
 {% block scripts %}
+  <script src="{{ url_for('static', filename='js/test-design-generation.js') }}" defer></script>
   <script>
     (() => {
       const project = document.getElementById("project_id");

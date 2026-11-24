@@ -1,9 +1,11 @@
 import json
+from functools import wraps
 from time import perf_counter
 
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import joinedload
+from sqlalchemy.orm.exc import StaleDataError
 
 from app.extensions import db
 from app.models import (
@@ -29,6 +31,9 @@ from .test_design.diagnostics import (
 )
 from .test_design.evidence import GenerationRecorder, safe_error, safe_metadata
 from .test_design.mock_provider import MockTestDesignProvider
+from .test_design.submissions import (
+    GenerationReplay, submission_fingerprint, valid_request_key,
+)
 from .test_design.prompts import PROMPT_VERSION
 from .test_design.quality import score_test_design
 from .test_design.reviews import (
@@ -72,6 +77,30 @@ def calculate_session_status(statuses):
     return "rejected"
 
 
+def _review_transaction(method):
+    @wraps(method)
+    def wrapped(*args, **kwargs):
+        try:
+            # Queries during scoring and review creation must not flush partial
+            # edits before the entire review transaction is ready to commit.
+            with db.session.no_autoflush:
+                return method(*args, **kwargs)
+        except StaleDataError:
+            db.session.rollback()
+            raise WorkflowConflictError(
+                "This draft or review session changed. Reload it before reviewing."
+            ) from None
+        except SQLAlchemyError:
+            db.session.rollback()
+            raise WorkflowPersistenceError(
+                "The review could not be saved. No review changes were committed."
+            ) from None
+        except Exception:
+            db.session.rollback()
+            raise
+    return wrapped
+
+
 class TestDesignService:
     def __init__(self, config, provider=None):
         self.config = config
@@ -84,7 +113,10 @@ class TestDesignService:
         version_id,
         title,
         requirement_text,
+        request_key=None,
     ):
+        if request_key is not None and not valid_request_key(request_key):
+            raise TestDesignValidationError("Invalid submission key. Open a new generation form.")
         context = self._validate_context(title, requirement_text)
         project = db.session.get(Project, project_id)
         if project is None:
@@ -98,7 +130,7 @@ class TestDesignService:
             )
 
         provider = self.provider or self._create_provider()
-        return self._generate(context, project.id, version.id, provider)
+        return self._generate(context, project.id, version.id, provider, request_key=request_key)
 
     def generate_for_session(self, session_id):
         session = self.get_session(session_id)
@@ -108,14 +140,21 @@ class TestDesignService:
             context, session.project_id, session.version_id, provider, session=session,
         )
 
-    def _generate(self, context, project_id, version_id, provider, session=None):
+    def _generate(self, context, project_id, version_id, provider, session=None, request_key=None):
         provider.last_call_metadata = None
         set_validation_summary(provider, None)
         recorder = GenerationRecorder(self.config)
-        run_id = recorder.start(
-            context=context, project_id=project_id, version_id=version_id,
-            provider=provider, session_id=session.id if session else None,
-        )
+        try:
+            run_id = recorder.start(
+                context=context, project_id=project_id, version_id=version_id,
+                provider=provider, session_id=session.id if session else None,
+                request_key=request_key,
+                request_fingerprint=(submission_fingerprint(
+                    context, project_id, version_id, provider,
+                ) if request_key else None),
+            )
+        except GenerationReplay as replay:
+            return self.get_session(replay.session_id)
         started = perf_counter()
         structured_output = None
         try:
@@ -161,15 +200,20 @@ class TestDesignService:
                 run_id, error=AIResponseError("Invalid schema."),
                 metadata=safe_metadata(provider, self.config),
                 latency_ms=max(0, round((perf_counter() - started) * 1000)),
+                validation_summary=getattr(provider, "last_validation_summary", None),
             )
-            raise AIResponseError(
+            error = AIResponseError(
                 "AI test design output failed strict schema validation."
-            ) from None
+            )
+            error.run_id = run_id
+            raise error from None
         except Exception as exc:
             recorder.fail(
                 run_id, error=exc, metadata=safe_metadata(provider, self.config),
                 latency_ms=max(0, round((perf_counter() - started) * 1000)),
+                validation_summary=getattr(provider, "last_validation_summary", None),
             )
+            exc.run_id = run_id
             raise
 
         metadata = safe_metadata(provider, self.config)
@@ -217,6 +261,7 @@ class TestDesignService:
             run = db.session.get(GenerationRun, run_id)
             run.session = session
             run.status = "succeeded"
+            run.active_request_scope = None
             run.finished_at = utc_now()
             run.latency_ms = max(0, round((perf_counter() - started) * 1000))
             for name, value in metadata.items():
@@ -232,10 +277,13 @@ class TestDesignService:
                 metadata=metadata,
                 latency_ms=max(0, round((perf_counter() - started) * 1000)),
                 structured_output_json=structured_output,
+                validation_summary=getattr(provider, "last_validation_summary", None),
             )
-            raise WorkflowPersistenceError(
+            error = WorkflowPersistenceError(
                 "Test design could not be saved. Call evidence was retained."
-            ) from exc
+            )
+            error.run_id = run_id
+            raise error from exc
         return session
 
     def list_sessions(
@@ -284,10 +332,13 @@ class TestDesignService:
             raise WorkflowNotFoundError("TestCase Draft does not exist.")
         return draft
 
-    def update_draft(self, draft_id, data, *, reviewer_user_id=None, comment=None):
+    @_review_transaction
+    def update_draft(self, draft_id, data, *, reviewer_user_id=None, comment=None,
+                     draft_revision=None, session_revision=None):
         reviewer, comment = self._review_identity(reviewer_user_id, comment)
         draft = self.get_draft(draft_id)
         self._require_pending(draft)
+        self._claim_review(draft, draft_revision, session_revision)
         validated = DraftEditInput.model_validate(data)
         self._require_safe_draft_content(validated)
         before = draft_snapshot(draft)
@@ -314,10 +365,13 @@ class TestDesignService:
         )
         return draft
 
-    def accept_draft(self, draft_id, *, reviewer_user_id=None, comment=None):
+    @_review_transaction
+    def accept_draft(self, draft_id, *, reviewer_user_id=None, comment=None,
+                     draft_revision=None, session_revision=None):
         reviewer, comment = self._review_identity(reviewer_user_id, comment)
         draft = self.get_draft(draft_id)
         self._require_pending(draft)
+        self._claim_review(draft, draft_revision, session_revision)
         validated = self._validated_draft(draft)
         version = db.session.get(Version, draft.session.version_id)
         if version is None:
@@ -360,6 +414,8 @@ class TestDesignService:
                 config=self.config,
             ))
             db.session.commit()
+        except StaleDataError:
+            raise
         except IntegrityError as exc:
             db.session.rollback()
             raise WorkflowConflictError(
@@ -372,10 +428,13 @@ class TestDesignService:
             ) from exc
         return test_case
 
-    def reject_draft(self, draft_id, *, reviewer_user_id=None, comment=None):
+    @_review_transaction
+    def reject_draft(self, draft_id, *, reviewer_user_id=None, comment=None,
+                     draft_revision=None, session_revision=None):
         reviewer, comment = self._review_identity(reviewer_user_id, comment)
         draft = self.get_draft(draft_id)
         self._require_pending(draft)
+        self._claim_review(draft, draft_revision, session_revision)
         before = draft_snapshot(draft)
         score_before = self.assessment_for_session(draft.session).quality_score
         draft.status = "rejected"
@@ -431,6 +490,10 @@ class TestDesignService:
         )
 
     def _create_provider(self):
+        if self.config.get("AI_CONFIG_ERROR"):
+            raise AIConfigurationError(
+                "AI configuration is invalid. Correct the local configuration before generating."
+            )
         provider_name = self.config.get("AI_PROVIDER", "mock")
         if provider_name == "mock":
             return MockTestDesignProvider()
@@ -483,6 +546,20 @@ class TestDesignService:
         return context
 
     @staticmethod
+    def _claim_review(draft, draft_revision, session_revision):
+        session = draft.session
+        for expected, actual in ((draft_revision, draft.revision),
+                                 (session_revision, session.review_revision)):
+            if expected is not None and (type(expected) is not int or expected != actual):
+                raise WorkflowConflictError(
+                    "This draft or review session changed. Reload it before reviewing."
+                )
+        # Force a versioned session write even when score/status stay unchanged.
+        # This serializes concurrent reviews of different drafts in one session.
+        session.review_revision += 1
+        draft.revision += 1
+
+    @staticmethod
     def _require_pending(draft):
         if draft.status != "pending":
             raise WorkflowConflictError(
@@ -530,6 +607,8 @@ class TestDesignService:
     def _commit_draft_change(error_message):
         try:
             db.session.commit()
+        except StaleDataError:
+            raise
         except IntegrityError as exc:
             db.session.rollback()
             raise WorkflowConflictError(error_message) from exc

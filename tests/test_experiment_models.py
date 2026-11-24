@@ -8,6 +8,10 @@ from app.extensions import db
 
 
 RUN_FIELDS = {
+    "request_key",
+    "request_fingerprint",
+    "active_request_scope",
+    "validation_summary_json",
     "id",
     "session_id",
     "project_id",
@@ -51,6 +55,10 @@ REVIEW_FIELDS = {
     "created_at",
 }
 NULL_RUN_METADATA = {
+    "request_key",
+    "request_fingerprint",
+    "active_request_scope",
+    "validation_summary_json",
     "provider_model",
     "finished_at",
     "latency_ms",

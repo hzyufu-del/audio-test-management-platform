@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}Generation #{{ run.id }} - AI Test Design{% endblock %}
+
+{% block content %}
+  <section class="page-heading">
+    <div>
+      <p class="eyebrow">generation record</p>
+      <h1>生成记录 #{{ run.id }}</h1>
+      <p class="text-muted mb-0">{{ run.title }} · {{ run.provider }}{% if run.provider_model %} / {{ run.provider_model }}{% endif %}</p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{{ url_for('ai_test_design.index') }}">Back to list</a>
+  </section>
+
+  {% if run.provider == "mock" %}
+    <p class="alert alert-info" role="note">Mock 模拟生成记录：未调用真实大模型。</p>
+  {% endif %}
+  {% if run.status == "running" %}
+    <div class="alert alert-warning" role="status">
+      <strong>运行中或结果待确认。</strong>尚无持久化终态；请求可能仍在处理，也可能因进程中断未能记录结果。
+      请刷新本页查询，不要直接重复提交。系统不会自动重新调用模型，也不会把等待时间当作失败证明。
+    </div>
+  {% elif run.status == "failed" %}
+    <div class="alert alert-danger" role="status">
+      <strong>本次生成未成功保存为可审核草稿。</strong>
+      {{ run.error_message or "请查看下方诊断信息。" }}
+      请先根据诊断检查输入或配置，确认后再手动发起新请求。
+    </div>
+  {% elif run.status == "succeeded" %}
+    <div class="alert alert-success" role="status">
+      结构化草稿已保存，仍需人工审核后才能成为正式用例。
+    </div>
+  {% endif %}
+
+  <section class="panel mb-4">
+    <div class="panel-header"><h2>运行状态</h2><span class="badge text-bg-secondary">{{ run.status }}</span></div>
+    <dl class="row mb-0">
+      <dt class="col-sm-3">Project / Version</dt><dd class="col-sm-9">{{ run.project.name }} / {{ run.version.name }}</dd>
+      <dt class="col-sm-3">Prompt version</dt><dd class="col-sm-9">{{ run.prompt_version }}</dd>
+      <dt class="col-sm-3">Started (UTC)</dt><dd class="col-sm-9">{{ run.started_at.strftime("%Y-%m-%d %H:%M:%S") }}</dd>
+      <dt class="col-sm-3">Finished (UTC)</dt><dd class="col-sm-9">{{ run.finished_at.strftime("%Y-%m-%d %H:%M:%S") if run.finished_at else "Not finished" }}</dd>
+      <dt class="col-sm-3">Latency</dt><dd class="col-sm-9">{{ (run.latency_ms|string ~ " ms") if run.latency_ms is not none else "Not returned" }}</dd>
+      <dt class="col-sm-3">Total tokens</dt><dd class="col-sm-9">{{ run.total_tokens if run.total_tokens is not none else "Not returned" }}</dd>
+      <dt class="col-sm-3">Finish reason</dt><dd class="col-sm-9">{{ run.finish_reason if run.finish_reason is not none else "Not returned" }}</dd>
+    </dl>
+  </section>
+
+  <section class="panel mb-4">
+    <div class="panel-header"><h2>安全诊断</h2></div>
+    {% if validation_summary %}
+      <dl class="row mb-0">
+        <dt class="col-sm-3">Stage</dt><dd class="col-sm-9">{{ validation_summary.stage }}</dd>
+        <dt class="col-sm-3">Categories</dt><dd class="col-sm-9">{{ validation_summary.error_categories|join(", ") or "Not recorded" }}</dd>
+        <dt class="col-sm-3">Field paths</dt><dd class="col-sm-9 text-break">{{ validation_summary.field_paths|join(", ") or "Not recorded" }}</dd>
+        <dt class="col-sm-3">Error count</dt><dd class="col-sm-9">{{ validation_summary.error_count }}</dd>
+      </dl>
+    {% else %}
+      <p class="text-muted mb-0">未记录详细诊断。历史记录缺少诊断不代表没有发生错误。</p>
+    {% endif %}
+    <p class="text-muted small mt-2 mb-0">此处只展示安全的错误分类和字段路径，不展示模型原始响应或凭据。</p>
+  </section>
+
+  <div class="d-flex flex-wrap gap-2">
+    <a class="btn btn-outline-primary" href="{{ url_for('ai_test_design.run_detail', run_id=run.id) }}">刷新状态（仅查询）</a>
+    {% if run.status == "succeeded" and run.session_id %}
+      <a class="btn btn-primary" href="{{ url_for('ai_test_design.detail', session_id=run.session_id) }}">查看并审核草稿</a>
+    {% elif run.status == "failed" %}
+      <a class="btn btn-outline-secondary" href="{{ url_for('ai_test_design.create') }}">重新填写并手动提交</a>
+    {% endif %}
+  </div>
+{% endblock %}

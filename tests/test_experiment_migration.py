@@ -92,6 +92,12 @@ def test_evidence_migration_fresh_upgrade_schema_and_alembic_check(tmp_path):
         assert draft_keys[("generation_run_id",)]["options"]["ondelete"] == "RESTRICT"
         assert draft_keys[("session_id",)]["options"]["ondelete"] == "CASCADE"
         assert db.session.execute(text("PRAGMA foreign_key_check")).fetchall() == []
+    # Preserve the historical-revision assertions above, then compare the
+    # current ORM only after applying subsequent additive migrations.
+    result = runner.invoke(args=["db", "upgrade"])
+    assert result.exit_code == 0, result.output
+    result = runner.invoke(args=["db", "upgrade", "head"])
+    assert result.exit_code == 0, result.output
     result = runner.invoke(args=["db", "check"])
     assert result.exit_code == 0, result.output
 
@@ -139,6 +145,8 @@ def test_evidence_migration_preserves_old_rows_without_fabricating_evidence(tmp_
             == 0
         )
         assert db.session.execute(text("PRAGMA foreign_key_check")).fetchall() == []
+    result = runner.invoke(args=["db", "upgrade", "head"])
+    assert result.exit_code == 0, result.output
     result = runner.invoke(args=["db", "check"])
     assert result.exit_code == 0, result.output
 
@@ -173,6 +181,8 @@ def test_evidence_migration_downgrade_and_reupgrade_preserve_historical_rows(tmp
         )
         assert db.session.execute(text("PRAGMA foreign_key_check")).fetchall() == []
     result = runner.invoke(args=["db", "upgrade", EVIDENCE_REVISION])
+    assert result.exit_code == 0, result.output
+    result = runner.invoke(args=["db", "upgrade", "head"])
     assert result.exit_code == 0, result.output
     result = runner.invoke(args=["db", "check"])
     assert result.exit_code == 0, result.output

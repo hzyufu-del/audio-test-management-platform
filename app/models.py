@@ -206,6 +206,9 @@ class TestDesignSession(db.Model):
         ),
     )
 
+    review_revision = db.Column(db.Integer, nullable=False, default=1, server_default="1")
+    __mapper_args__ = {"version_id_col": review_revision}
+
     id = db.Column(db.Integer, primary_key=True)
     project_id = db.Column(
         db.Integer,
@@ -291,6 +294,9 @@ class TestCaseDraft(db.Model):
         ),
     )
 
+    revision = db.Column(db.Integer, nullable=False, default=1, server_default="1")
+    __mapper_args__ = {"version_id_col": revision}
+
     id = db.Column(db.Integer, primary_key=True)
     session_id = db.Column(
         db.Integer,
@@ -355,6 +361,8 @@ class TestCaseDraft(db.Model):
 
 class GenerationRun(db.Model):
     __table_args__ = (
+        db.Index("uq_generation_run_request_key", "request_key", unique=True),
+        db.Index("uq_generation_run_active_scope", "active_request_scope", unique=True),
         db.CheckConstraint(
             "status IN ('running', 'succeeded', 'failed')",
             name="ck_generation_run_status",
@@ -409,6 +417,11 @@ class GenerationRun(db.Model):
     error_type = db.Column(db.String(80))
     error_message = db.Column(db.Text)
     structured_output_json = db.Column(db.Text)
+    # Nullable keeps historical/offline generation calls independent of Web tokens.
+    request_key = db.Column(db.String(128))
+    request_fingerprint = db.Column(db.String(64))
+    active_request_scope = db.Column(db.String(64))
+    validation_summary_json = db.Column(db.Text)
     created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
 
     session = db.relationship("TestDesignSession", back_populates="generation_runs")

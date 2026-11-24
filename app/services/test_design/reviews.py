@@ -88,7 +88,8 @@ def build_review_record(
     """Build an unsaved record using caller-supplied Session quality scores."""
     after = draft_snapshot(draft)
     changed_fields = sorted(
-        field for field in CONTENT_FIELDS if before[field] != after[field]
+        field for field in CONTENT_FIELDS
+        if _comparison_value(field, before[field]) != _comparison_value(field, after[field])
     )
     return ReviewRecord(
         draft=draft,
@@ -102,6 +103,14 @@ def build_review_record(
         changed_field_count=len(changed_fields),
         comment=comment,
     )
+
+
+def _comparison_value(field, value):
+    # Browser form submission can change LF to CRLF without a steps edit.
+    # Normalize only this comparison value; retain original stored snapshots.
+    if field == "steps" and isinstance(value, str):
+        return value.replace("\r\n", "\n")
+    return value
 
 
 def _safe_snapshot(snapshot, config):

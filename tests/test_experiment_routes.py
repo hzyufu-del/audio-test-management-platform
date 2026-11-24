@@ -1,3 +1,4 @@
+from review_form_helpers import with_review_revisions
 import json
 from types import SimpleNamespace
 
@@ -83,7 +84,7 @@ def reviewer_client(experiment_app):
         },
     )
     assert response.status_code == 302
-    return client
+    return with_review_revisions(client, experiment_app)
 
 
 def _draft_form(draft, **overrides):
@@ -156,6 +157,99 @@ def test_logged_in_edit_records_identity_and_separate_comment(
         assert record.comment == "Checked the sample requirement."
         assert json.loads(record.changed_fields_json) == ["title"]
         assert record.changed_field_count == 1
+
+
+@pytest.mark.parametrize(
+    ("change_title", "change_steps", "line_ending", "expected"),
+    [(True, False, "\n", ["title"]),
+     (True, False, "\r\n", ["title"]),
+     (False, True, "\r\n", ["steps"]),
+     (True, True, "\r\n", ["steps", "title"]),
+     (False, False, "\r\n", [])],
+    ids=["title-only", "title-with-browser-crlf", "steps-only",
+         "title-and-steps", "newline-only"],
+)
+def test_web02_edit_count_versions_acceptance_and_refresh(
+    experiment_app, reviewer_client, change_title, change_steps, line_ending, expected,
+):
+    from app.services.test_design.reviews import review_metrics
+
+    ids = experiment_app.config["EVIDENCE_TEST_IDS"]
+    edit_url = f"/ai-test-design/drafts/{ids['draft']}/edit"
+    with experiment_app.app_context():
+        draft = db.session.get(ModelTestCaseDraft, ids["draft"])
+        original_steps = draft.steps
+        assert "\n" in original_steps and "\r" not in original_steps
+        steps = original_steps.replace("\n", line_ending)
+        if change_steps:
+            steps += line_ending + "4. Check the sample status again."
+        title = "Demo corrected review title" if change_title else draft.title
+        old_revision = draft.revision
+        old_session_revision = draft.session.review_revision
+        data = _draft_form(
+            draft, title=title, steps=steps,
+            draft_revision=str(old_revision),
+            session_revision=str(old_session_revision),
+        )
+        generation_run_id = draft.generation_run_id
+        reject_id = draft.session.drafts[1].id
+    response = reviewer_client.post(edit_url, data=data)
+    assert response.status_code == 302
+    detail_url = response.location
+
+    with experiment_app.app_context():
+        draft = db.session.get(ModelTestCaseDraft, ids["draft"])
+        record = ReviewRecord.query.one()
+        assert json.loads(record.changed_fields_json) == expected
+        assert record.changed_field_count == len(expected)
+        assert record.action == "edit" and record.reviewer_user_id == ids["reviewer"]
+        assert json.loads(record.before_snapshot_json)["steps"] == original_steps
+        assert json.loads(record.after_snapshot_json)["steps"] == steps
+        assert draft.steps == steps and draft.title == title
+        assert draft.revision == old_revision + 1
+        assert draft.session.review_revision == old_session_revision + 1
+        assert ModelTestCase.query.count() == 0
+        metrics = review_metrics(draft.session.drafts)
+        assert metrics["edited_drafts"] == int(bool(expected))
+        assert metrics["average_changed_fields"] == len(expected)
+        edit_evidence = (
+            record.before_snapshot_json, record.after_snapshot_json,
+            record.changed_fields_json, record.changed_field_count,
+        )
+
+    # Even a newline-only review consumes its versions; stale edits stay rejected.
+    for _ in range(2):
+        assert reviewer_client.post(edit_url, data=data).status_code == 409
+    assert reviewer_client.post(
+        f"/ai-test-design/drafts/{ids['draft']}/accept",
+    ).status_code == 302
+    assert reviewer_client.post(
+        f"/ai-test-design/drafts/{reject_id}/reject",
+    ).status_code == 302
+    assert reviewer_client.get(detail_url).status_code == 200
+    assert reviewer_client.get(detail_url).status_code == 200
+
+    with experiment_app.app_context():
+        # Requery persisted records through a fresh Session.
+        db.session.remove()
+        draft = db.session.get(ModelTestCaseDraft, ids["draft"])
+        case = ModelTestCase.query.one()
+        assert draft.status == "accepted" and draft.accepted_test_case_id == case.id
+        assert case.status == "draft" and case.version_id == ids["version"]
+        assert case.title == title and case.steps == steps
+        assert draft.generation_run_id == generation_run_id
+        assert draft.revision == old_revision + 2
+        assert draft.session.review_revision == old_session_revision + 3
+        rejected = db.session.get(ModelTestCaseDraft, reject_id)
+        assert rejected.status == "rejected" and rejected.accepted_test_case_id is None
+        records = ReviewRecord.query.order_by(ReviewRecord.id).all()
+        assert [record.action for record in records] == ["edit", "accept", "reject"]
+        edit = records[0]
+        assert (edit.before_snapshot_json, edit.after_snapshot_json,
+                edit.changed_fields_json, edit.changed_field_count) == edit_evidence
+        assert all(record.changed_field_count == 0 for record in records[1:])
+        assert json.loads(records[1].after_snapshot_json)["accepted_test_case_id"] == case.id
+        assert GenerationRun.query.count() == 1
 
 
 @pytest.mark.parametrize("action", ["accept", "reject"])

@@ -111,6 +111,7 @@ def test_models_expose_required_columns_relationships_and_constraints(app):
 
         assert session_columns == {
             "id",
+            "review_revision",
             "project_id",
             "version_id",
             "title",
@@ -127,6 +128,7 @@ def test_models_expose_required_columns_relationships_and_constraints(app):
         }
         assert draft_columns == {
             "id",
+            "revision",
             "session_id",
             "generation_run_id",
             "suggested_code",
@@ -150,6 +152,8 @@ def test_models_expose_required_columns_relationships_and_constraints(app):
         db.session.commit()
 
         assert session.project is project
+        assert session.review_revision == 1
+        assert draft.revision == 1
         assert session.version is version
         assert session.drafts == [draft]
         assert draft.session is session

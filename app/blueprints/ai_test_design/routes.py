@@ -1,4 +1,5 @@
 import json
+import secrets
 
 from flask import (
     Blueprint,
@@ -16,6 +17,8 @@ from app.extensions import db
 from app.models import GenerationRun, Project, TestCaseDraft, TestDesignSession, Version
 from app.services.ai.exceptions import AIReviewError
 from app.services.test_design.reviews import review_metrics
+from app.services.test_design.diagnostics import sanitize_validation_summary
+from app.services.test_design.submissions import valid_request_key
 from app.services.test_design.schemas import (
     CaseType,
     Priority,
@@ -96,6 +99,8 @@ def index():
 
 @bp.route("/new", methods=["GET", "POST"])
 def create():
+    request_key = request.form.get("request_key", "") if request.method == "POST" else secrets.token_urlsafe(32)
+    last_run_id = None
     form_data = {
         "project_id": request.form.get("project_id", "").strip(),
         "version_id": request.form.get("version_id", "").strip(),
@@ -107,6 +112,9 @@ def create():
     }
     errors = []
     if request.method == "POST":
+        if not valid_request_key(request_key):
+            errors.append("Invalid submission key. Reload the form before generating.")
+            request_key = secrets.token_urlsafe(32)
         project_id = _required_int(
             form_data["project_id"],
             "Project is required.",
@@ -126,6 +134,7 @@ def create():
                     version_id=version_id,
                     title=form_data["title"],
                     requirement_text=form_data["requirement_text"],
+                    request_key=request_key,
                 )
             except (
                 AIReviewError,
@@ -135,6 +144,15 @@ def create():
                 WorkflowPersistenceError,
             ) as exc:
                 errors.append(str(exc))
+                details = getattr(exc, "details", {})
+                last_run_id = getattr(exc, "run_id", None) or details.get("run_id")
+                if last_run_id is not None:
+                    recorded = db.session.get(GenerationRun, last_run_id)
+                    if recorded is not None and recorded.status == "failed":
+                        # A new key is only usable after a deliberate new submit;
+                        # rendering this form never dispatches another model call.
+                        request_key = secrets.token_urlsafe(32)
+                        errors.append("The attempt failed. Review its run record; submit again only to start a new attempt.")
             else:
                 flash(
                     "AI Test Design drafts generated. Human review required.",
@@ -153,7 +171,24 @@ def create():
         form_data=form_data,
         projects=_projects(),
         versions=_versions(),
+        request_key=request_key,
+        last_run_id=last_run_id,
+        failed_run_id=last_run_id,
+        runtime_provider=("invalid" if current_app.config.get("AI_CONFIG_ERROR") else current_app.config.get("AI_PROVIDER", "mock")),
+        runtime_ai_enabled=bool(current_app.config.get("AI_ENABLED", False)),
+        runtime_config_error=("AI configuration is invalid. Correct local settings before generating."
+                              if current_app.config.get("AI_CONFIG_ERROR") else ""),
     )
+
+
+@bp.get("/runs/<int:run_id>")
+def run_detail(run_id):
+    run = db.get_or_404(GenerationRun, run_id)
+    try:
+        summary = sanitize_validation_summary(json.loads(run.validation_summary_json or "null"))
+    except (TypeError, ValueError):
+        summary = None
+    return render_template("ai_test_design/run.html", run=run, validation_summary=summary)
 
 
 @bp.get("/<int:session_id>")
@@ -185,13 +220,16 @@ def detail(session_id):
 def edit_draft(draft_id):
     draft = db.get_or_404(TestCaseDraft, draft_id)
     errors = []
+    status_code = 200
+    expected_draft_revision = request.form.get("draft_revision") if request.method == "POST" else draft.revision
+    expected_session_revision = request.form.get("session_revision") if request.method == "POST" else draft.session.review_revision
     form_data = _draft_form_data(draft)
     if request.method == "POST":
         form_data = {
             field: request.form.get(field, "").strip()
             for field in DRAFT_FORM_FIELDS
         }
-        unknown_fields = set(request.form) - (DRAFT_FORM_FIELDS | {"comment"})
+        unknown_fields = set(request.form) - (DRAFT_FORM_FIELDS | {"comment", "draft_revision", "session_revision"})
         if unknown_fields:
             errors.append(
                 "Unknown form field: "
@@ -205,6 +243,7 @@ def edit_draft(draft_id):
                     form_data,
                     reviewer_user_id=current_user.id,
                     comment=request.form.get("comment"),
+                    **_review_versions(),
                 )
             except ValidationError:
                 errors.append(
@@ -216,6 +255,8 @@ def edit_draft(draft_id):
                 WorkflowPersistenceError,
             ) as exc:
                 errors.append(str(exc))
+                if isinstance(exc, WorkflowConflictError):
+                    status_code = 409
             else:
                 flash("TestCase Draft updated.", "success")
                 return redirect(
@@ -229,10 +270,12 @@ def edit_draft(draft_id):
         draft=draft,
         errors=errors,
         form_data=form_data,
+        draft_revision=expected_draft_revision,
+        session_revision=expected_session_revision,
         priorities=[item.value for item in Priority],
         case_types=[item.value for item in CaseType],
         scenario_types=[item.value for item in ScenarioType],
-    )
+    ), status_code
 
 
 @bp.post("/drafts/<int:draft_id>/accept")
@@ -247,6 +290,7 @@ def accept_draft(draft_id):
             draft.id,
             reviewer_user_id=current_user.id,
             comment=request.form.get("comment"),
+            **_review_versions(),
         )
     except ValidationError:
         flash("Draft fields failed strict validation.", "danger")
@@ -287,6 +331,7 @@ def reject_draft(draft_id):
             draft.id,
             reviewer_user_id=current_user.id,
             comment=request.form.get("comment"),
+            **_review_versions(),
         )
     except (
         TestDesignValidationError,
@@ -303,6 +348,16 @@ def reject_draft(draft_id):
     return redirect(
         url_for("ai_test_design.detail", session_id=session_id)
     )
+
+
+def _review_versions():
+    values = {}
+    for name in ("draft_revision", "session_revision"):
+        raw = request.form.get(name, "")
+        if not raw.isascii() or not raw.isdigit() or len(raw) > 10 or int(raw) < 1:
+            raise WorkflowConflictError("Review version is missing or invalid. Reload the draft before reviewing.")
+        values[name] = int(raw)
+    return values
 
 
 def _projects():

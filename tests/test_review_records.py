@@ -218,6 +218,67 @@ def test_nullable_precondition_normalization_does_not_count_as_an_edit(
         assert record.changed_field_count == 0
 
 
+@pytest.mark.parametrize(
+    ("old_steps", "new_steps", "title_changed", "expected"),
+    [
+        ("1. Demo start\n2. Demo check", "1. Demo start\n2. Demo check", True, ["title"]),
+        ("1. Demo start\n2. Demo check", "1. Demo start\r\n2. Demo check", True, ["title"]),
+        ("1. Demo start\n2. Demo check", "1. Demo start\r\n2. Demo check", False, []),
+        ("1. Demo start\r\n2. Demo check", "1. Demo start\n2. Demo check", False, []),
+        ("1. Demo start\n2. Demo check\r\n3. Demo stop", "1. Demo start\r\n2. Demo check\n3. Demo stop", False, []),
+        ("1. Demo start\n2. Demo check", "1. Demo start\n2. Demo retry", False, ["steps"]),
+        ("1. Demo start\n2. Demo check", "1. Demo start\r\n2. Demo retry", True, ["steps", "title"]),
+        ("1. Demo start\n2. Demo check", "1. Demo start\r\n2. Demo retry", False, ["steps"]),
+        ("1. Demo start\n2. Demo check", "1. Demo start\r\n\r\n2. Demo check", False, ["steps"]),
+        ("1. Demo start\n2. Demo check", "1. Demo start\r\n  2. Demo check", False, ["steps"]),
+        ("1. Demo start\n2. Demo check", "2. Demo check\r\n1. Demo start", False, ["steps"]),
+        ("1. Demo start\n2. Demo check", "1. Demo start\r2. Demo check", False, ["steps"]),
+    ],
+    ids=["title-only", "title-with-browser-crlf", "lf-to-crlf", "crlf-to-lf",
+         "mixed-endings", "steps-only", "title-and-steps", "content-and-crlf",
+         "extra-blank-line", "indentation", "reordered", "bare-cr-is-content"],
+)
+def test_web02_step_comparison_preserves_original_snapshots(
+    app, catalog, draft_id, old_steps, new_steps, title_changed, expected,
+):
+    from app.services.test_design.reviews import build_review_record, draft_snapshot
+
+    with app.app_context():
+        draft = db.session.get(ModelTestCaseDraft, draft_id)
+        reviewer = db.session.get(User, catalog["reviewer_id"])
+        draft.steps = old_steps
+        before = draft_snapshot(draft)
+        draft.steps = new_steps
+        if title_changed:
+            draft.title = "Demo revised title"
+        after = draft_snapshot(draft)
+
+        record = build_review_record(draft, reviewer, "edit", before, 85, 85)
+
+        assert json.loads(record.changed_fields_json) == expected
+        assert record.changed_field_count == len(expected)
+        assert json.loads(record.before_snapshot_json) == before
+        assert json.loads(record.after_snapshot_json) == after
+        assert before["steps"] == old_steps
+        assert draft.steps == new_steps
+
+
+def test_web02_newline_equivalence_is_limited_to_steps(app, catalog, draft_id):
+    from app.services.test_design.reviews import build_review_record, draft_snapshot
+
+    with app.app_context():
+        draft = db.session.get(ModelTestCaseDraft, draft_id)
+        reviewer = db.session.get(User, catalog["reviewer_id"])
+        draft.expected_result = "Demo result one\nDemo result two"
+        before = draft_snapshot(draft)
+        draft.expected_result = "Demo result one\r\nDemo result two"
+
+        record = build_review_record(draft, reviewer, "edit", before, 85, 85)
+
+        assert json.loads(record.changed_fields_json) == ["expected_result"]
+        assert record.changed_field_count == 1
+
+
 def test_resolve_reviewer_accepts_existing_trusted_internal_user(app, catalog):
     from app.services.test_design.reviews import resolve_reviewer
 

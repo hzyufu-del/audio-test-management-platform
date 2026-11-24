@@ -1,4 +1,6 @@
+from review_form_helpers import with_review_revisions
 import pytest
+import secrets
 
 from app import create_app
 from app.extensions import db
@@ -53,7 +55,7 @@ def client(app):
         },
     )
     assert response.status_code == 302
-    return client
+    return with_review_revisions(client, app)
 
 
 @pytest.fixture()
@@ -95,6 +97,7 @@ def targets(app):
 
 def valid_form(targets, **overrides):
     data = {
+        "request_key": secrets.token_urlsafe(32),
         "project_id": str(targets["project_id"]),
         "version_id": str(targets["version_id"]),
         "title": "Demo route test design",
